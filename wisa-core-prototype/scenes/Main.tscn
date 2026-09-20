@@ -1,0 +1,505 @@
+[gd_scene format=3 uid="uid://p0exiy6db84u"]
+
+[ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/Enemy.tscn" id="2"]
+[ext_resource type="Script" uid="uid://cm6vr1s2m6qgb" path="res://scripts/main.gd" id="3"]
+[ext_resource type="Texture2D" uid="uid://cgx4m1bks0v2w" path="res://assets/ground/assest/dirttextile.png" id="4_jlsqs"]
+[ext_resource type="Texture2D" uid="uid://cky7d27iwrr6j" path="res://assets/ground/assest/grasstextile.png" id="5_q8u5g"]
+[ext_resource type="Texture2D" uid="uid://ci4v561asmcjo" path="res://assets/ground/assest/grasstile1.png" id="6_lhr70"]
+[ext_resource type="Texture2D" uid="uid://dp6davmqyh3ki" path="res://assets/ground/assest/cobble.png" id="7_wp0k4"]
+[ext_resource type="Texture2D" uid="uid://bcnjy1jy1efwk" path="res://assets/ground/assest/sand.png" id="8_bjd11"]
+
+[sub_resource type="RectangleShape2D" id="WallH"]
+size = Vector2(1000, 20)
+
+[sub_resource type="RectangleShape2D" id="WallV"]
+size = Vector2(20, 700)
+
+[sub_resource type="RectangleShape2D" id="ObstacleShape"]
+size = Vector2(50, 66)
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_qmy6f"]
+texture = ExtResource("4_jlsqs")
+6:0/0 = 0
+7:0/0 = 0
+8:0/0 = 0
+9:0/0 = 0
+4:1/0 = 0
+5:1/0 = 0
+6:1/0 = 0
+7:1/0 = 0
+8:1/0 = 0
+9:1/0 = 0
+10:1/0 = 0
+11:1/0 = 0
+2:2/0 = 0
+3:2/0 = 0
+4:2/0 = 0
+5:2/0 = 0
+6:2/0 = 0
+7:2/0 = 0
+8:2/0 = 0
+9:2/0 = 0
+10:2/0 = 0
+11:2/0 = 0
+12:2/0 = 0
+13:2/0 = 0
+0:3/0 = 0
+1:3/0 = 0
+2:3/0 = 0
+3:3/0 = 0
+4:3/0 = 0
+5:3/0 = 0
+6:3/0 = 0
+7:3/0 = 0
+8:3/0 = 0
+9:3/0 = 0
+10:3/0 = 0
+11:3/0 = 0
+12:3/0 = 0
+13:3/0 = 0
+14:3/0 = 0
+15:3/0 = 0
+0:4/0 = 0
+1:4/0 = 0
+2:4/0 = 0
+3:4/0 = 0
+4:4/0 = 0
+5:4/0 = 0
+6:4/0 = 0
+7:4/0 = 0
+8:4/0 = 0
+9:4/0 = 0
+10:4/0 = 0
+11:4/0 = 0
+12:4/0 = 0
+13:4/0 = 0
+14:4/0 = 0
+15:4/0 = 0
+1:5/0 = 0
+2:5/0 = 0
+3:5/0 = 0
+4:5/0 = 0
+5:5/0 = 0
+6:5/0 = 0
+7:5/0 = 0
+8:5/0 = 0
+9:5/0 = 0
+10:5/0 = 0
+11:5/0 = 0
+12:5/0 = 0
+13:5/0 = 0
+14:5/0 = 0
+3:6/0 = 0
+4:6/0 = 0
+5:6/0 = 0
+6:6/0 = 0
+7:6/0 = 0
+8:6/0 = 0
+9:6/0 = 0
+10:6/0 = 0
+11:6/0 = 0
+12:6/0 = 0
+5:7/0 = 0
+6:7/0 = 0
+7:7/0 = 0
+8:7/0 = 0
+9:7/0 = 0
+10:7/0 = 0
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_mwfav"]
+texture = ExtResource("5_q8u5g")
+6:0/0 = 0
+7:0/0 = 0
+8:0/0 = 0
+9:0/0 = 0
+4:1/0 = 0
+5:1/0 = 0
+6:1/0 = 0
+7:1/0 = 0
+8:1/0 = 0
+9:1/0 = 0
+10:1/0 = 0
+11:1/0 = 0
+2:2/0 = 0
+3:2/0 = 0
+4:2/0 = 0
+5:2/0 = 0
+6:2/0 = 0
+7:2/0 = 0
+8:2/0 = 0
+9:2/0 = 0
+10:2/0 = 0
+11:2/0 = 0
+12:2/0 = 0
+13:2/0 = 0
+0:3/0 = 0
+1:3/0 = 0
+2:3/0 = 0
+3:3/0 = 0
+4:3/0 = 0
+5:3/0 = 0
+6:3/0 = 0
+7:3/0 = 0
+8:3/0 = 0
+9:3/0 = 0
+10:3/0 = 0
+11:3/0 = 0
+12:3/0 = 0
+13:3/0 = 0
+14:3/0 = 0
+15:3/0 = 0
+0:4/0 = 0
+1:4/0 = 0
+2:4/0 = 0
+3:4/0 = 0
+4:4/0 = 0
+5:4/0 = 0
+6:4/0 = 0
+7:4/0 = 0
+8:4/0 = 0
+9:4/0 = 0
+10:4/0 = 0
+11:4/0 = 0
+12:4/0 = 0
+13:4/0 = 0
+14:4/0 = 0
+15:4/0 = 0
+1:5/0 = 0
+2:5/0 = 0
+3:5/0 = 0
+4:5/0 = 0
+5:5/0 = 0
+6:5/0 = 0
+7:5/0 = 0
+8:5/0 = 0
+9:5/0 = 0
+10:5/0 = 0
+11:5/0 = 0
+12:5/0 = 0
+13:5/0 = 0
+14:5/0 = 0
+3:6/0 = 0
+4:6/0 = 0
+5:6/0 = 0
+6:6/0 = 0
+7:6/0 = 0
+8:6/0 = 0
+9:6/0 = 0
+10:6/0 = 0
+11:6/0 = 0
+12:6/0 = 0
+5:7/0 = 0
+6:7/0 = 0
+7:7/0 = 0
+8:7/0 = 0
+9:7/0 = 0
+10:7/0 = 0
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_3p2gp"]
+texture = ExtResource("6_lhr70")
+4:0/0 = 0
+5:0/0 = 0
+6:0/0 = 0
+7:0/0 = 0
+8:0/0 = 0
+9:0/0 = 0
+10:0/0 = 0
+11:0/0 = 0
+1:1/0 = 0
+2:1/0 = 0
+3:1/0 = 0
+4:1/0 = 0
+5:1/0 = 0
+6:1/0 = 0
+7:1/0 = 0
+8:1/0 = 0
+9:1/0 = 0
+10:1/0 = 0
+11:1/0 = 0
+12:1/0 = 0
+13:1/0 = 0
+14:1/0 = 0
+0:2/0 = 0
+1:2/0 = 0
+2:2/0 = 0
+3:2/0 = 0
+4:2/0 = 0
+5:2/0 = 0
+6:2/0 = 0
+7:2/0 = 0
+8:2/0 = 0
+9:2/0 = 0
+10:2/0 = 0
+11:2/0 = 0
+12:2/0 = 0
+13:2/0 = 0
+14:2/0 = 0
+15:2/0 = 0
+0:3/0 = 0
+1:3/0 = 0
+2:3/0 = 0
+3:3/0 = 0
+4:3/0 = 0
+5:3/0 = 0
+6:3/0 = 0
+7:3/0 = 0
+8:3/0 = 0
+9:3/0 = 0
+10:3/0 = 0
+11:3/0 = 0
+12:3/0 = 0
+13:3/0 = 0
+14:3/0 = 0
+15:3/0 = 0
+0:4/0 = 0
+1:4/0 = 0
+2:4/0 = 0
+3:4/0 = 0
+4:4/0 = 0
+5:4/0 = 0
+6:4/0 = 0
+7:4/0 = 0
+8:4/0 = 0
+9:4/0 = 0
+10:4/0 = 0
+11:4/0 = 0
+12:4/0 = 0
+13:4/0 = 0
+14:4/0 = 0
+15:4/0 = 0
+1:5/0 = 0
+2:5/0 = 0
+3:5/0 = 0
+4:5/0 = 0
+5:5/0 = 0
+6:5/0 = 0
+7:5/0 = 0
+8:5/0 = 0
+9:5/0 = 0
+10:5/0 = 0
+11:5/0 = 0
+12:5/0 = 0
+13:5/0 = 0
+14:5/0 = 0
+3:6/0 = 0
+4:6/0 = 0
+5:6/0 = 0
+6:6/0 = 0
+7:6/0 = 0
+8:6/0 = 0
+9:6/0 = 0
+10:6/0 = 0
+11:6/0 = 0
+12:6/0 = 0
+4:7/0 = 0
+5:7/0 = 0
+6:7/0 = 0
+7:7/0 = 0
+8:7/0 = 0
+9:7/0 = 0
+10:7/0 = 0
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_cvmbd"]
+texture = ExtResource("7_wp0k4")
+6:0/0 = 0
+7:0/0 = 0
+8:0/0 = 0
+9:0/0 = 0
+4:1/0 = 0
+5:1/0 = 0
+6:1/0 = 0
+7:1/0 = 0
+8:1/0 = 0
+9:1/0 = 0
+10:1/0 = 0
+11:1/0 = 0
+2:2/0 = 0
+3:2/0 = 0
+4:2/0 = 0
+5:2/0 = 0
+6:2/0 = 0
+7:2/0 = 0
+8:2/0 = 0
+9:2/0 = 0
+10:2/0 = 0
+11:2/0 = 0
+12:2/0 = 0
+13:2/0 = 0
+0:3/0 = 0
+1:3/0 = 0
+2:3/0 = 0
+3:3/0 = 0
+4:3/0 = 0
+5:3/0 = 0
+6:3/0 = 0
+7:3/0 = 0
+8:3/0 = 0
+9:3/0 = 0
+10:3/0 = 0
+11:3/0 = 0
+12:3/0 = 0
+13:3/0 = 0
+14:3/0 = 0
+15:3/0 = 0
+0:4/0 = 0
+1:4/0 = 0
+2:4/0 = 0
+3:4/0 = 0
+4:4/0 = 0
+5:4/0 = 0
+6:4/0 = 0
+7:4/0 = 0
+8:4/0 = 0
+9:4/0 = 0
+10:4/0 = 0
+11:4/0 = 0
+12:4/0 = 0
+13:4/0 = 0
+14:4/0 = 0
+15:4/0 = 0
+1:5/0 = 0
+2:5/0 = 0
+3:5/0 = 0
+4:5/0 = 0
+5:5/0 = 0
+6:5/0 = 0
+7:5/0 = 0
+8:5/0 = 0
+9:5/0 = 0
+10:5/0 = 0
+11:5/0 = 0
+12:5/0 = 0
+13:5/0 = 0
+14:5/0 = 0
+3:6/0 = 0
+4:6/0 = 0
+5:6/0 = 0
+6:6/0 = 0
+7:6/0 = 0
+8:6/0 = 0
+9:6/0 = 0
+10:6/0 = 0
+11:6/0 = 0
+12:6/0 = 0
+5:7/0 = 0
+6:7/0 = 0
+7:7/0 = 0
+8:7/0 = 0
+9:7/0 = 0
+10:7/0 = 0
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_ft6cd"]
+texture = ExtResource("8_bjd11")
+
+[sub_resource type="TileSet" id="TileSet_nqf8b"]
+tile_shape = 1
+tile_size = Vector2i(256, 128)
+sources/0 = SubResource("TileSetAtlasSource_qmy6f")
+sources/1 = SubResource("TileSetAtlasSource_mwfav")
+sources/2 = SubResource("TileSetAtlasSource_3p2gp")
+sources/3 = SubResource("TileSetAtlasSource_cvmbd")
+sources/4 = SubResource("TileSetAtlasSource_ft6cd")
+
+[node name="Main" type="Node2D" unique_id=200691175]
+y_sort_enabled = true
+script = ExtResource("3")
+
+[node name="Floor" type="Polygon2D" parent="." unique_id=281331094]
+z_index = -10
+color = Color(0.169, 0.125, 0.22, 1)
+polygon = PackedVector2Array(0, -350, 500, 0, 0, 350, -500, 0)
+
+[node name="FloorOutline" type="Line2D" parent="." unique_id=1167167028]
+z_index = -9
+points = PackedVector2Array(0, -350, 500, 0, 0, 350, -500, 0, 0, -350)
+width = 4.0
+default_color = Color(0.039, 0.031, 0.063, 1)
+
+[node name="Walls" type="Node2D" parent="." unique_id=1947524334]
+z_index = -8
+
+[node name="WallTop" type="StaticBody2D" parent="Walls" unique_id=2062535777]
+position = Vector2(0, -350)
+collision_mask = 0
+
+[node name="WallTopShape" type="CollisionShape2D" parent="Walls/WallTop" unique_id=1839720751]
+shape = SubResource("WallH")
+
+[node name="WallBottom" type="StaticBody2D" parent="Walls" unique_id=965041938]
+position = Vector2(0, 350)
+collision_mask = 0
+
+[node name="WallBottomShape" type="CollisionShape2D" parent="Walls/WallBottom" unique_id=1428111131]
+shape = SubResource("WallH")
+
+[node name="WallLeft" type="StaticBody2D" parent="Walls" unique_id=1457266242]
+position = Vector2(-500, 0)
+collision_mask = 0
+
+[node name="WallLeftShape" type="CollisionShape2D" parent="Walls/WallLeft" unique_id=1842460501]
+shape = SubResource("WallV")
+
+[node name="WallRight" type="StaticBody2D" parent="Walls" unique_id=780654356]
+position = Vector2(500, 0)
+collision_mask = 0
+
+[node name="WallRightShape" type="CollisionShape2D" parent="Walls/WallRight" unique_id=762544886]
+shape = SubResource("WallV")
+
+[node name="Player" parent="." unique_id=2077584066 instance=ExtResource("1")]
+position = Vector2(-150, 0)
+
+[node name="Enemy" parent="." unique_id=1499784202 instance=ExtResource("2")]
+position = Vector2(150, 0)
+
+[node name="Obstacle1" type="StaticBody2D" parent="." unique_id=661778168]
+position = Vector2(-180, -90)
+collision_mask = 0
+
+[node name="Obstacle1Shape" type="CollisionShape2D" parent="Obstacle1" unique_id=1307201034]
+shape = SubResource("ObstacleShape")
+
+[node name="Obstacle1Sprite" type="Polygon2D" parent="Obstacle1" unique_id=1073151848]
+color = Color(0.227, 0.169, 0.29, 1)
+polygon = PackedVector2Array(0, -33, 25, 0, 0, 33, -25, 0)
+
+[node name="Obstacle1Outline" type="Line2D" parent="Obstacle1" unique_id=1730522220]
+points = PackedVector2Array(0, -33, 25, 0, 0, 33, -25, 0, 0, -33)
+width = 3.0
+default_color = Color(0.039, 0.031, 0.063, 1)
+
+[node name="Obstacle2" type="StaticBody2D" parent="." unique_id=1039309504]
+position = Vector2(180, 90)
+collision_mask = 0
+
+[node name="Obstacle2Shape" type="CollisionShape2D" parent="Obstacle2" unique_id=157640089]
+shape = SubResource("ObstacleShape")
+
+[node name="Obstacle2Sprite" type="Polygon2D" parent="Obstacle2" unique_id=1486626727]
+color = Color(0.227, 0.169, 0.29, 1)
+polygon = PackedVector2Array(0, -33, 25, 0, 0, 33, -25, 0)
+
+[node name="Obstacle2Outline" type="Line2D" parent="Obstacle2" unique_id=121499598]
+points = PackedVector2Array(0, -33, 25, 0, 0, 33, -25, 0, 0, -33)
+width = 3.0
+default_color = Color(0.039, 0.031, 0.063, 1)
+
+[node name="Obstacle3" type="StaticBody2D" parent="." unique_id=63914725]
+position = Vector2(0, 150)
+collision_mask = 0
+
+[node name="Obstacle3Shape" type="CollisionShape2D" parent="Obstacle3" unique_id=2065636367]
+shape = SubResource("ObstacleShape")
+
+[node name="Obstacle3Sprite" type="Polygon2D" parent="Obstacle3" unique_id=33739959]
+color = Color(0.227, 0.169, 0.29, 1)
+polygon = PackedVector2Array(0, -33, 25, 0, 0, 33, -25, 0)
+
+[node name="Obstacle3Outline" type="Line2D" parent="Obstacle3" unique_id=1459711891]
+points = PackedVector2Array(0, -33, 25, 0, 0, 33, -25, 0, 0, -33)
+width = 3.0
+default_color = Color(0.039, 0.031, 0.063, 1)
+
+[node name="suelo" type="TileMapLayer" parent="." unique_id=2111956492]
+tile_set = SubResource("TileSet_nqf8b")
