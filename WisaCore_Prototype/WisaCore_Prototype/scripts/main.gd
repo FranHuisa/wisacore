@@ -23,6 +23,14 @@ var inventory_panel: Control
 var equipment_buttons: Dictionary = {}
 var backpack_buttons: Array = []
 var ui_canvas: CanvasLayer
+var windows_layer: Control
+var floating_windows: Array = []
+
+var character_panel: Control
+var character_value_labels: Dictionary = {}
+
+var abilities_panel: Control
+var ability_cooldown_labels: Dictionary = {}
 
 
 func _ready() -> void:
@@ -32,24 +40,38 @@ func _ready() -> void:
 	player.target_changed.connect(_on_target_changed)
 	player.ability_cooldown_changed.connect(_on_ability_cooldown_changed)
 	player.inventory_changed.connect(_refresh_inventory_ui)
+	player.inventory_changed.connect(_refresh_character_ui)
 	_on_player_health_changed(player.current_health, player.max_health)
 	_on_player_stamina_changed(player.current_stamina, player.max_stamina)
 	_build_inventory_ui()
+	_build_character_ui()
+	_build_abilities_ui()
 
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_ESCAPE:
-			if inventory_panel != null and inventory_panel.visible:
-				inventory_panel.visible = false
-			else:
+			var closed_something := false
+			for w in floating_windows:
+				if w.visible:
+					w.visible = false
+					closed_something = true
+			if not closed_something:
 				get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
 		elif event.physical_keycode == KEY_I:
-			if inventory_panel == null:
-				return
-			inventory_panel.visible = not inventory_panel.visible
-			if inventory_panel.visible:
-				_refresh_inventory_ui()
+			_toggle_window(inventory_panel, _refresh_inventory_ui)
+		elif event.physical_keycode == KEY_C:
+			_toggle_window(character_panel, _refresh_character_ui)
+		elif event.physical_keycode == KEY_H:
+			_toggle_window(abilities_panel, Callable())
+
+
+func _toggle_window(panel: Control, on_open_refresh: Callable) -> void:
+	if panel == null:
+		return
+	panel.visible = not panel.visible
+	if panel.visible and on_open_refresh.is_valid():
+		on_open_refresh.call()
 
 
 func _build_ui() -> void:
@@ -178,57 +200,46 @@ func _on_target_died() -> void:
 	current_target_ref = null
 
 
-func _build_inventory_ui() -> void:
-	if ui_canvas == null:
-		push_warning("No se pudo construir el inventario: falta el CanvasLayer.")
-		return
-	var canvas := ui_canvas
+func _get_windows_layer() -> Control:
+	if windows_layer == null:
+		windows_layer = Control.new()
+		windows_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+		windows_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ui_canvas.add_child(windows_layer)
+	return windows_layer
 
-	inventory_panel = Control.new()
-	inventory_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	inventory_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	inventory_panel.visible = false
-	canvas.add_child(inventory_panel)
 
-	# --- Franja lateral derecha: aquí vive la ventana, centrada solo
-	# verticalmente dentro de la franja (su tamaño depende del contenido). ---
-	var side_strip := Control.new()
-	side_strip.anchor_left = 1.0
-	side_strip.anchor_right = 1.0
-	side_strip.anchor_top = 0.0
-	side_strip.anchor_bottom = 1.0
-	side_strip.offset_left = -340.0
-	side_strip.offset_right = -20.0
-	side_strip.offset_top = 0.0
-	side_strip.offset_bottom = 0.0
-	side_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	inventory_panel.add_child(side_strip)
-
-	var vcenter := CenterContainer.new()
-	vcenter.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vcenter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	side_strip.add_child(vcenter)
-
-	# --- "Ventana" del inventario: tamaño según su contenido ---
+## Crea una ventana flotante y arrastrable (barra de título + X).
+## Devuelve {"panel": PanelContainer, "box": VBoxContainer} para que
+## quien la llame añada su propio contenido dentro de "box".
+func _make_window(title_text: String, initial_position: Vector2) -> Dictionary:
 	var window_panel := PanelContainer.new()
+	window_panel.position = initial_position
+	window_panel.visible = false
+
 	var window_style := StyleBoxFlat.new()
 	window_style.bg_color = Color(0.11, 0.09, 0.14, 0.98)
 	window_style.border_color = Color(0.039, 0.031, 0.063)
 	window_style.set_border_width_all(3)
 	window_style.set_content_margin_all(14)
 	window_panel.add_theme_stylebox_override("panel", window_style)
-	vcenter.add_child(window_panel)
+
+	_get_windows_layer().add_child(window_panel)
+	floating_windows.append(window_panel)
 
 	var window_box := VBoxContainer.new()
 	window_box.add_theme_constant_override("separation", 10)
 	window_panel.add_child(window_box)
 
-	# --- Barra de título con botón de cerrar (X) ---
+	# --- Barra de título: arrastrable, con botón de cerrar (X) ---
 	var title_bar := HBoxContainer.new()
+	title_bar.set_script(load("res://scripts/drag_handle.gd"))
+	title_bar.target = window_panel
+	title_bar.mouse_default_cursor_shape = Control.CURSOR_MOVE
 	window_box.add_child(title_bar)
 
 	var window_title := Label.new()
-	window_title.text = "Inventario"
+	window_title.text = title_text
 	window_title.add_theme_color_override("font_color", Color(0.478, 0.125, 0.188))
 	window_title.add_theme_font_size_override("font_size", 20)
 	window_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -236,8 +247,21 @@ func _build_inventory_ui() -> void:
 
 	var close_button := _make_slot_button("X")
 	close_button.custom_minimum_size = Vector2(26, 26)
-	close_button.pressed.connect(_on_inventory_close_pressed)
+	close_button.pressed.connect(func(): window_panel.visible = false)
 	title_bar.add_child(close_button)
+
+	return {"panel": window_panel, "box": window_box}
+
+
+func _build_inventory_ui() -> void:
+	if ui_canvas == null:
+		push_warning("No se pudo construir el inventario: falta el CanvasLayer.")
+		return
+
+	var vp_size := get_viewport().get_visible_rect().size
+	var win := _make_window("Inventario", Vector2(vp_size.x - 380.0, 90.0))
+	inventory_panel = win["panel"]
+	var window_box: VBoxContainer = win["box"]
 
 	# --- Equipamiento como un "muñeco": cada ranura donde iría en el cuerpo ---
 	var equip_title := Label.new()
@@ -294,10 +318,6 @@ func _build_inventory_ui() -> void:
 		button.pressed.connect(_on_backpack_slot_pressed.bind(i))
 		grid.add_child(button)
 		backpack_buttons.append(button)
-
-
-func _on_inventory_close_pressed() -> void:
-	inventory_panel.visible = false
 
 
 func _make_slot_button(text: String) -> Button:
@@ -364,7 +384,141 @@ func _on_ability_cooldown_changed(ability_name: String, time_left: float, max_ti
 	elif ability_name == "dodge":
 		label = dodge_cd_label
 
-	if label == null:
+	if label != null:
+		label.text = "%.1f" % time_left if time_left > 0.0 else ""
+
+	if ability_cooldown_labels.has(ability_name):
+		var window_label: Label = ability_cooldown_labels[ability_name]
+		window_label.text = "Cooldown: %.1fs" % time_left if time_left > 0.0 else "Lista"
+
+
+func _build_character_ui() -> void:
+	if ui_canvas == null:
 		return
 
-	label.text = "%.1f" % time_left if time_left > 0.0 else ""
+	var win := _make_window("Mi personaje", Vector2(20.0, 100.0))
+	character_panel = win["panel"]
+	var box: VBoxContainer = win["box"]
+
+	var attr_title := Label.new()
+	attr_title.text = "Atributos"
+	attr_title.add_theme_color_override("font_color", Color(0.478, 0.125, 0.188))
+	attr_title.add_theme_font_size_override("font_size", 16)
+	box.add_child(attr_title)
+
+	var attr_keys := [
+		["estabilidad", "Estabilidad"], ["agilidad", "Agilidad"],
+		["destreza", "Destreza"], ["punteria", "Puntería"],
+		["fuerza", "Fuerza"], ["voluntad", "Voluntad"],
+		["canalizacion", "Canalización"], ["conexion_elemental", "Conexión Elemental"],
+	]
+	for pair in attr_keys:
+		var row := HBoxContainer.new()
+		box.add_child(row)
+		var name_label := Label.new()
+		name_label.text = pair[1]
+		name_label.custom_minimum_size = Vector2(150, 0)
+		name_label.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+		row.add_child(name_label)
+		var value_label := Label.new()
+		value_label.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+		row.add_child(value_label)
+		character_value_labels[pair[0]] = value_label
+
+	var res_title := Label.new()
+	res_title.text = "Recursos y derivados"
+	res_title.add_theme_color_override("font_color", Color(0.478, 0.125, 0.188))
+	res_title.add_theme_font_size_override("font_size", 16)
+	box.add_child(res_title)
+
+	var derived_keys := [
+		["max_health", "Vida máxima"], ["max_stamina", "Aguante máximo"],
+		["max_mana", "Maná máximo"], ["move_speed", "Velocidad"],
+		["melee_damage_multiplier", "Mult. daño cuerpo a cuerpo"],
+	]
+	for pair in derived_keys:
+		var row := HBoxContainer.new()
+		box.add_child(row)
+		var name_label := Label.new()
+		name_label.text = pair[1]
+		name_label.custom_minimum_size = Vector2(180, 0)
+		name_label.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+		row.add_child(name_label)
+		var value_label := Label.new()
+		value_label.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+		row.add_child(value_label)
+		character_value_labels[pair[0]] = value_label
+
+	_refresh_character_ui()
+
+
+func _refresh_character_ui() -> void:
+	if character_value_labels.is_empty():
+		return
+
+	var eff: StatBlock = player.effective_stats
+	if eff == null:
+		return
+
+	character_value_labels["estabilidad"].text = "%.1f" % eff.estabilidad
+	character_value_labels["agilidad"].text = "%.1f" % eff.agilidad
+	character_value_labels["destreza"].text = "%.1f" % eff.destreza
+	character_value_labels["punteria"].text = "%.1f" % eff.punteria
+	character_value_labels["fuerza"].text = "%.1f" % eff.fuerza
+	character_value_labels["voluntad"].text = "%.1f" % eff.voluntad
+	character_value_labels["canalizacion"].text = "%.1f" % eff.canalizacion
+	character_value_labels["conexion_elemental"].text = "%.1f" % eff.conexion_elemental
+
+	character_value_labels["max_health"].text = "%.0f" % player.max_health
+	character_value_labels["max_stamina"].text = "%.0f" % player.max_stamina
+	character_value_labels["max_mana"].text = "%.0f" % player.max_mana
+	character_value_labels["move_speed"].text = "%.0f" % player.move_speed
+	character_value_labels["melee_damage_multiplier"].text = "x%.2f" % player.melee_damage_multiplier
+
+
+func _build_abilities_ui() -> void:
+	if ui_canvas == null:
+		return
+
+	var win := _make_window("Mis habilidades", Vector2(20.0, 420.0))
+	abilities_panel = win["panel"]
+	var box: VBoxContainer = win["box"]
+	box.custom_minimum_size = Vector2(260, 0)
+
+	var abilities := [
+		["Ataque básico", "Clic izq. / 1", "Golpea de frente, sin necesitar objetivo.", ""],
+		["Golpe de Poder", "2", "Golpe fuerte contra el objetivo bloqueado (Tab).", "power_strike"],
+		["Esquivar", "Espacio", "Dash corto con invulnerabilidad breve. Cuesta Aguante.", "dodge"],
+	]
+
+	for ability in abilities:
+		var card := VBoxContainer.new()
+		card.add_theme_constant_override("separation", 2)
+		box.add_child(card)
+
+		var header := HBoxContainer.new()
+		card.add_child(header)
+
+		var name_label := Label.new()
+		name_label.text = "%s  (%s)" % [ability[0], ability[1]]
+		name_label.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+		header.add_child(name_label)
+
+		var desc_label := Label.new()
+		desc_label.text = ability[2]
+		desc_label.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
+		desc_label.add_theme_font_size_override("font_size", 12)
+		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+		desc_label.custom_minimum_size = Vector2(240, 0)
+		card.add_child(desc_label)
+
+		if ability[3] != "":
+			var cd_label := Label.new()
+			cd_label.text = "Lista"
+			cd_label.add_theme_color_override("font_color", Color(0.478, 0.125, 0.188))
+			cd_label.add_theme_font_size_override("font_size", 12)
+			card.add_child(cd_label)
+			ability_cooldown_labels[ability[3]] = cd_label
+
+		var sep := HSeparator.new()
+		card.add_child(sep)

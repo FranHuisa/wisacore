@@ -37,6 +37,7 @@ var sprint_stamina_cost: float = 8.0
 
 var inventory: Inventory
 var equipment: Equipment
+var effective_stats: StatBlock
 
 var current_health: float
 var current_stamina: float
@@ -148,6 +149,7 @@ func recalculate_stats() -> void:
 	effective.vida_base += bonus["vida_base"]
 	effective.aguante_base += bonus["aguante_base"]
 	effective.mana_base += bonus["mana_base"]
+	effective_stats = effective
 
 	max_health = effective.get_max_health()
 	max_stamina = effective.get_max_stamina()

@@ -133,6 +133,20 @@ recomendadas (tiles de 64×64, tamaños de personaje, paleta en hex).
   ni penalización de movilidad — eso llega cuando definamos qué clase
   puede llevar qué (parte del Paso 4, framework de clases).
 
+## Ventanas arrastrables (esta versión)
+
+- **Todas las ventanas** (Inventario, Personaje, Habilidades) ahora se
+  pueden **arrastrar desde su barra de título** con el cursor, gracias a
+  `scripts/drag_handle.gd` (un script reutilizable para cualquier
+  ventana futura).
+- **`C`** abre/cierra **Mi personaje**: los 8 atributos combinados
+  (base + equipo) y los valores derivados (vida, aguante, maná,
+  velocidad, multiplicador de daño), en vivo.
+- **`H`** abre/cierra **Mis habilidades**: las 3 habilidades actuales
+  con su tecla, descripción y cooldown en vivo.
+- **Esc** ahora cierra cualquier ventana que esté abierta (la que sea);
+  solo te manda al menú si no había ninguna ventana abierta.
+
 ## Ajustes de esta versión
 
 - **Resolución**: el juego arranca en **pantalla completa a la resolución
