@@ -327,13 +327,13 @@ func _build_inventory_ui() -> void:
 	window_box.add_child(equip_title)
 
 	var paperdoll := Control.new()
-	paperdoll.custom_minimum_size = Vector2(280, 350)
+	paperdoll.custom_minimum_size = Vector2(320, 380)
 	window_box.add_child(paperdoll)
 
 	var silhouette := TextureRect.new()
 	silhouette.texture = load("res://assets/ui/character_silhouette.png")
-	silhouette.position = Vector2(81, 6)
-	silhouette.size = Vector2(118, 293)
+	silhouette.position = Vector2(95, 24)
+	silhouette.size = Vector2(130, 323)
 	silhouette.stretch_mode = TextureRect.STRETCH_SCALE
 	silhouette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	silhouette.modulate = Color(1, 1, 1, 0.35)
@@ -357,19 +357,21 @@ func _build_inventory_ui() -> void:
 		Equipment.Slot.ARMA_SECUNDARIA: "res://assets/ui/icons/shield.png",
 	}
 
-	# Posiciones absolutas alrededor de la silueta (contenedor 280x350).
+	# Dos columnas de ranuras, una a cada lado de la silueta (contenedor
+	# 320x380): columna izquierda con la armadura de cuerpo, columna
+	# derecha con manos/anillos/armas.
 	var slot_positions := {
-		Equipment.Slot.CABEZA: Vector2(116, 4),
-		Equipment.Slot.COLLAR: Vector2(176, 10),
-		Equipment.Slot.ACCESORIO_1: Vector2(28, 66),
-		Equipment.Slot.PECHO: Vector2(116, 66),
-		Equipment.Slot.ACCESORIO_2: Vector2(204, 66),
-		Equipment.Slot.ARMA_SECUNDARIA: Vector2(28, 128),
-		Equipment.Slot.MANOS: Vector2(116, 128),
-		Equipment.Slot.ARMA: Vector2(204, 128),
-		Equipment.Slot.CINTURON: Vector2(116, 186),
-		Equipment.Slot.PIERNAS: Vector2(116, 240),
-		Equipment.Slot.PIES: Vector2(116, 296),
+		Equipment.Slot.CABEZA: Vector2(16, 6),
+		Equipment.Slot.COLLAR: Vector2(16, 68),
+		Equipment.Slot.PECHO: Vector2(16, 130),
+		Equipment.Slot.CINTURON: Vector2(16, 192),
+		Equipment.Slot.PIERNAS: Vector2(16, 254),
+		Equipment.Slot.PIES: Vector2(16, 316),
+		Equipment.Slot.MANOS: Vector2(256, 6),
+		Equipment.Slot.ACCESORIO_1: Vector2(256, 84),
+		Equipment.Slot.ARMA: Vector2(256, 161),
+		Equipment.Slot.ACCESORIO_2: Vector2(256, 238),
+		Equipment.Slot.ARMA_SECUNDARIA: Vector2(256, 316),
 	}
 
 	for slot in slot_positions.keys():
@@ -462,12 +464,14 @@ func _refresh_inventory_ui() -> void:
 			button.tooltip_text = slot_name
 			if button.default_icon_path != "":
 				button.icon = load(button.default_icon_path)
+			button.add_theme_color_override("icon_normal_color", Color(0.55, 0.55, 0.58, 0.35))
 		else:
 			style.bg_color = item.color
 			button.tooltip_text = item.item_name
 			var icon_to_use: String = item.icon_path if item.icon_path != "" else button.default_icon_path
 			if icon_to_use != "":
 				button.icon = load(icon_to_use)
+			button.add_theme_color_override("icon_normal_color", Color(1, 1, 1, 1))
 
 	for i in range(Inventory.SIZE):
 		var entry = player.inventory.get_at(i)
