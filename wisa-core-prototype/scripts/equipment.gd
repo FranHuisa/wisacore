@@ -3,8 +3,8 @@ class_name Equipment
 
 ## =========================================================
 ## WisaCore - Ranuras de equipamiento del personaje
-## Cabeza, Pecho, Manos, Piernas, Pies, 2 Accesorios,
-## Arma y Arma secundaria.
+## Cabeza, Pecho, Manos, Piernas, Pies, 2 Anillos, Collar,
+## Cinturón, Arma y Arma secundaria.
 ## =========================================================
 
 enum Slot {
@@ -15,6 +15,8 @@ enum Slot {
 	PIES,
 	ACCESORIO_1,
 	ACCESORIO_2,
+	COLLAR,
+	CINTURON,
 	ARMA,
 	ARMA_SECUNDARIA,
 }
@@ -25,8 +27,10 @@ const SLOT_NAMES := {
 	Slot.MANOS: "Manos",
 	Slot.PIERNAS: "Piernas",
 	Slot.PIES: "Pies",
-	Slot.ACCESORIO_1: "Accesorio 1",
-	Slot.ACCESORIO_2: "Accesorio 2",
+	Slot.ACCESORIO_1: "Anillo 1",
+	Slot.ACCESORIO_2: "Anillo 2",
+	Slot.COLLAR: "Collar",
+	Slot.CINTURON: "Cinturón",
 	Slot.ARMA: "Arma",
 	Slot.ARMA_SECUNDARIA: "Arma secundaria",
 }

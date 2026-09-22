@@ -38,6 +38,7 @@ var sprint_stamina_cost: float = 8.0
 var inventory: Inventory
 var equipment: Equipment
 var effective_stats: StatBlock
+var known_recipes: Array[Recipe] = []
 
 var current_health: float
 var current_stamina: float
@@ -77,6 +78,7 @@ func _ready() -> void:
 	equipment = Equipment.new()
 	inventory = Inventory.new()
 	_add_starting_items()
+	known_recipes = RecipeDatabase.get_all_recipes()
 
 	recalculate_stats()
 	current_health = max_health
@@ -93,44 +95,141 @@ func _add_starting_items() -> void:
 	var helmet := ItemData.new()
 	helmet.item_name = "Yelmo de Centinela"
 	helmet.equip_slot = Equipment.Slot.CABEZA
+	helmet.icon_path = "res://assets/ui/icons/helmet.png"
 	helmet.color = Color(0.4, 0.4, 0.45)
+	helmet.rarity = ItemData.Rarity.POCO_COMUN
+	helmet.description = "Yelmo de acero templado usado por los centinelas de la guardia fronteriza."
 	helmet.stat_bonuses = {"estabilidad": 3.0}
 	inventory.add_item(helmet)
 
 	var chest := ItemData.new()
 	chest.item_name = "Peto Reforzado"
 	chest.equip_slot = Equipment.Slot.PECHO
+	chest.icon_path = "res://assets/ui/icons/chest.png"
 	chest.color = Color(0.35, 0.3, 0.4)
+	chest.rarity = ItemData.Rarity.RARO
+	chest.description = "Placas de metal reforzadas con remaches. Pesado, pero ofrece buena protección."
 	chest.stat_bonuses = {"estabilidad": 2.0, "vida_base": 15.0}
 	inventory.add_item(chest)
 
 	var sword := ItemData.new()
 	sword.item_name = "Espada Corta"
 	sword.equip_slot = Equipment.Slot.ARMA
+	sword.icon_path = "res://assets/ui/icons/weapon_sword.png"
 	sword.color = Color(0.6, 0.6, 0.65)
+	sword.rarity = ItemData.Rarity.COMUN
+	sword.description = "Una espada corta de entrenamiento. Ligera y fácil de manejar."
 	sword.stat_bonuses = {"fuerza": 4.0}
 	inventory.add_item(sword)
 
 	var ring := ItemData.new()
 	ring.item_name = "Anillo de Agilidad"
 	ring.equip_slot = Equipment.Slot.ACCESORIO_1
+	ring.icon_path = "res://assets/ui/icons/ring.png"
 	ring.color = Color(0.5, 0.7, 0.6)
+	ring.rarity = ItemData.Rarity.EPICO
+	ring.description = "Un anillo tallado en jade que agiliza los reflejos de quien lo porta."
 	ring.stat_bonuses = {"agilidad": 3.0}
 	inventory.add_item(ring)
 
 	var boots := ItemData.new()
 	boots.item_name = "Botas Ligeras"
 	boots.equip_slot = Equipment.Slot.PIES
+	boots.icon_path = "res://assets/ui/icons/boots.png"
 	boots.color = Color(0.45, 0.4, 0.35)
+	boots.rarity = ItemData.Rarity.COMUN
+	boots.description = "Botas de cuero curtido, cómodas para largas caminatas."
 	boots.stat_bonuses = {"agilidad": 2.0}
 	inventory.add_item(boots)
 
-	var ore := ItemData.new()
-	ore.item_name = "Mineral de Hierro"
-	ore.item_type = ItemData.ItemType.MATERIAL
-	ore.stack_size = 20
-	ore.color = Color(0.5, 0.35, 0.3)
-	inventory.add_item(ore, 6)
+	var ring2 := ItemData.new()
+	ring2.item_name = "Anillo de Fuerza"
+	ring2.equip_slot = Equipment.Slot.ACCESORIO_2
+	ring2.icon_path = "res://assets/ui/icons/ring.png"
+	ring2.color = Color(0.7, 0.55, 0.35)
+	ring2.rarity = ItemData.Rarity.POCO_COMUN
+	ring2.description = "Un anillo pesado de bronce grabado con runas de fuerza."
+	ring2.stat_bonuses = {"fuerza": 2.0}
+	inventory.add_item(ring2)
+
+	var necklace := ItemData.new()
+	necklace.item_name = "Collar del Peregrino"
+	necklace.equip_slot = Equipment.Slot.COLLAR
+	necklace.icon_path = "res://assets/ui/icons/necklace.png"
+	necklace.color = Color(0.55, 0.75, 0.7)
+	necklace.rarity = ItemData.Rarity.RARO
+	necklace.description = "Cuentas de piedra pulida ensartadas en un cordón trenzado."
+	necklace.stat_bonuses = {"voluntad": 3.0}
+	inventory.add_item(necklace)
+
+	var belt := ItemData.new()
+	belt.item_name = "Cinturón de Cuero Reforzado"
+	belt.equip_slot = Equipment.Slot.CINTURON
+	belt.icon_path = "res://assets/ui/icons/belt.png"
+	belt.color = Color(0.5, 0.35, 0.22)
+	belt.rarity = ItemData.Rarity.COMUN
+	belt.description = "Cuero grueso con hebilla de hierro. Añade algo de aguante."
+	belt.stat_bonuses = {"aguante_base": 10.0}
+	inventory.add_item(belt)
+
+	# El set inicial se equipa directamente para que el personaje
+	# empiece ya "vestido" (índices 0-7, en el mismo orden en que se
+	# acaban de añadir arriba).
+	equip_from_inventory(0)  # Yelmo de Centinela
+	equip_from_inventory(1)  # Peto Reforzado
+	equip_from_inventory(2)  # Espada Corta
+	equip_from_inventory(3)  # Anillo de Agilidad
+	equip_from_inventory(4)  # Botas Ligeras
+	equip_from_inventory(5)  # Anillo de Fuerza
+	equip_from_inventory(6)  # Collar del Peregrino
+	equip_from_inventory(7)  # Cinturón de Cuero Reforzado
+
+	# Segundo casco (sin equipar, se queda en la mochila) para poder
+	# probar la comparación "nuevo vs. equipado": mejora estabilidad
+	# pero penaliza agilidad, así se ve tanto un + en verde como un -
+	# en rojo en el tooltip.
+	var helmet2 := ItemData.new()
+	helmet2.item_name = "Casco de Hierro"
+	helmet2.equip_slot = Equipment.Slot.CABEZA
+	helmet2.icon_path = "res://assets/ui/icons/helmet.png"
+	helmet2.color = Color(0.55, 0.5, 0.5)
+	helmet2.rarity = ItemData.Rarity.RARO
+	helmet2.description = "Casco macizo de hierro forjado. Más resistente que el yelmo estándar, pero también más pesado."
+	helmet2.stat_bonuses = {"estabilidad": 5.0, "agilidad": -1.0}
+	inventory.add_item(helmet2)
+
+	var shield := ItemData.new()
+	shield.item_name = "Escudo de Madera Reforzado"
+	shield.equip_slot = Equipment.Slot.ARMA_SECUNDARIA
+	shield.icon_path = "res://assets/ui/icons/shield.png"
+	shield.color = Color(0.45, 0.32, 0.22)
+	shield.rarity = ItemData.Rarity.COMUN
+	shield.description = "Un escudo sencillo de madera con refuerzos de hierro en el borde."
+	shield.stat_bonuses = {"estabilidad": 2.0}
+	inventory.add_item(shield)
+	for i in range(Inventory.SIZE):
+		var entry = inventory.get_at(i)
+		if entry != null and entry["item"] == shield:
+			equip_from_inventory(i)
+			break
+
+	var bow := ItemData.new()
+	bow.item_name = "Arco Corto de Caza"
+	bow.equip_slot = Equipment.Slot.ARMA
+	bow.icon_path = "res://assets/ui/icons/weapon_bow.png"
+	bow.color = Color(0.5, 0.4, 0.25)
+	bow.rarity = ItemData.Rarity.POCO_COMUN
+	bow.description = "Arco ligero, pensado para disparos rápidos a corta distancia. Se queda en la mochila para comparar con la Espada Corta equipada."
+	bow.stat_bonuses = {"punteria": 3.0}
+	inventory.add_item(bow)
+
+	# Materiales de crafteo (del catálogo, para que compartan item_id
+	# con las recetas de RecipeDatabase). Cantidades pensadas para
+	# poder craftear "Barra de Hierro" y "Vendaje de Tela" ya mismo.
+	inventory.add_item(ItemCatalog.get_item("iron_ore"), 6)
+	inventory.add_item(ItemCatalog.get_item("wood"), 10)
+	inventory.add_item(ItemCatalog.get_item("leather"), 5)
+	inventory.add_item(ItemCatalog.get_item("cloth"), 8)
 
 
 func recalculate_stats() -> void:
@@ -196,6 +295,53 @@ func unequip_to_inventory(slot: int) -> void:
 
 	recalculate_stats()
 	inventory_changed.emit()
+
+
+func count_item(item_id: String) -> int:
+	var total := 0
+	for i in range(Inventory.SIZE):
+		var entry = inventory.get_at(i)
+		if entry != null and entry["item"].item_id == item_id:
+			total += entry["quantity"]
+	return total
+
+
+func can_craft(recipe: Recipe) -> bool:
+	if recipe == null or not recipe.unlocked:
+		return false
+	for item_id in recipe.materials.keys():
+		var needed: int = recipe.materials[item_id]
+		if count_item(item_id) < needed:
+			return false
+	return true
+
+
+func craft(recipe: Recipe) -> bool:
+	if not can_craft(recipe):
+		return false
+	for item_id in recipe.materials.keys():
+		_remove_item_quantity(item_id, recipe.materials[item_id])
+
+	var result_item: ItemData = ItemCatalog.get_item(recipe.result_id)
+	inventory.add_item(result_item, recipe.result_quantity)
+
+	inventory_changed.emit()
+	return true
+
+
+func _remove_item_quantity(item_id: String, amount: int) -> void:
+	var remaining := amount
+	for i in range(Inventory.SIZE):
+		if remaining <= 0:
+			break
+		var entry = inventory.get_at(i)
+		if entry == null or entry["item"].item_id != item_id:
+			continue
+		var take: int = min(remaining, entry["quantity"])
+		entry["quantity"] -= take
+		remaining -= take
+		if entry["quantity"] <= 0:
+			inventory.remove_at(i)
 
 
 func _physics_process(delta: float) -> void:

@@ -22,10 +22,21 @@ func _init() -> void:
 
 func add_item(item: ItemData, quantity: int = 1) -> bool:
 	# Primero intenta apilar sobre slots existentes del mismo objeto.
+	# Si el objeto tiene item_id (materiales del catálogo de crafteo),
+	# compara por id en vez de por instancia: así dos ItemData distintos
+	# pero con el mismo id (p. ej. craftear más "Mineral de Hierro" en
+	# otro momento) se siguen apilando correctamente.
 	if item.stack_size > 1:
 		for i in range(SIZE):
 			var entry = slots[i]
-			if entry != null and entry["item"] == item and entry["quantity"] < item.stack_size:
+			if entry == null:
+				continue
+			var same_item: bool
+			if item.item_id != "" and entry["item"].item_id == item.item_id:
+				same_item = true
+			else:
+				same_item = entry["item"] == item
+			if same_item and entry["quantity"] < item.stack_size:
 				var space: int = item.stack_size - entry["quantity"]
 				var to_add: int = min(space, quantity)
 				entry["quantity"] += to_add

@@ -32,16 +32,6 @@ var character_value_labels: Dictionary = {}
 var abilities_panel: Control
 var ability_cooldown_labels: Dictionary = {}
 
-@onready var crafting_station: CraftingStation = $CraftingStation
-var near_crafting_station: bool = false
-var craft_prompt_label: Label
-
-var crafting_panel: Control
-var crafting_list_box: VBoxContainer
-
-var recipes_panel: Control
-var recipes_list_box: VBoxContainer
-
 
 func _ready() -> void:
 	_build_ui()
@@ -56,12 +46,6 @@ func _ready() -> void:
 	_build_inventory_ui()
 	_build_character_ui()
 	_build_abilities_ui()
-	_build_crafting_ui()
-	_build_recipes_ui()
-
-	crafting_station.player_entered_range.connect(_on_crafting_range_entered)
-	crafting_station.player_exited_range.connect(_on_crafting_range_exited)
-	player.add_to_group("player")
 
 
 func _input(event: InputEvent) -> void:
@@ -80,11 +64,6 @@ func _input(event: InputEvent) -> void:
 			_toggle_window(character_panel, _refresh_character_ui)
 		elif event.physical_keycode == KEY_H:
 			_toggle_window(abilities_panel, Callable())
-		elif event.physical_keycode == KEY_R:
-			_toggle_window(recipes_panel, _refresh_recipes_ui)
-		elif event.physical_keycode == KEY_E:
-			if near_crafting_station:
-				_toggle_window(crafting_panel, _refresh_crafting_ui)
 		elif event.physical_keycode >= KEY_1 and event.physical_keycode <= KEY_5:
 			# Atajos 1-5 reservados para un futuro sistema de equipamiento
 			# rápido (p. ej. cambiar de arma o usar un objeto desde una
@@ -100,18 +79,6 @@ func _toggle_window(panel: Control, on_open_refresh: Callable) -> void:
 	panel.visible = not panel.visible
 	if panel.visible and on_open_refresh.is_valid():
 		on_open_refresh.call()
-
-
-func _on_crafting_range_entered() -> void:
-	near_crafting_station = true
-	craft_prompt_label.visible = true
-
-
-func _on_crafting_range_exited() -> void:
-	near_crafting_station = false
-	craft_prompt_label.visible = false
-	if crafting_panel != null:
-		crafting_panel.visible = false
 
 
 func _on_quick_equip_shortcut(index: int) -> void:
@@ -192,17 +159,8 @@ func _build_ui() -> void:
 	# --- Instrucciones, ancladas arriba a la derecha ---
 	var instructions := Label.new()
 	instructions.position = Vector2(vp_size.x - 320.0, 20)
-	instructions.text = "WASD: Moverse\nTab: Seleccionar objetivo\nClic izq / 1: Ataque básico\n2: Golpe de poder\nEspacio: Esquivar\nI: Inventario\nR: Recetario"
+	instructions.text = "WASD: Moverse\nTab: Seleccionar objetivo\nClic izq / 1: Ataque básico\n2: Golpe de poder\nEspacio: Esquivar\nI: Inventario"
 	ui.add_child(instructions)
-
-	# --- Aviso de interacción con la estación de crafteo ---
-	craft_prompt_label = Label.new()
-	craft_prompt_label.text = "Pulsa E para craftear"
-	craft_prompt_label.add_theme_font_size_override("font_size", 18)
-	craft_prompt_label.add_theme_color_override("font_color", Color(0.95, 0.9, 0.6))
-	craft_prompt_label.position = Vector2(vp_size.x / 2.0 - 90.0, vp_size.y - 140.0)
-	craft_prompt_label.visible = false
-	ui.add_child(craft_prompt_label)
 
 
 func _make_ability_slot(label_text: String) -> Panel:
@@ -327,49 +285,42 @@ func _build_inventory_ui() -> void:
 	window_box.add_child(equip_title)
 
 	var paperdoll := Control.new()
-	paperdoll.custom_minimum_size = Vector2(280, 350)
+	paperdoll.custom_minimum_size = Vector2(256, 300)
 	window_box.add_child(paperdoll)
 
 	var silhouette := TextureRect.new()
 	silhouette.texture = load("res://assets/ui/character_silhouette.png")
-	silhouette.position = Vector2(81, 6)
-	silhouette.size = Vector2(118, 293)
+	silhouette.position = Vector2(63, 5)
+	silhouette.size = Vector2(130, 293)
 	silhouette.stretch_mode = TextureRect.STRETCH_SCALE
 	silhouette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	silhouette.modulate = Color(1, 1, 1, 0.35)
+	silhouette.modulate = Color(1, 1, 1, 0.9)
 	paperdoll.add_child(silhouette)
 
-	# Icono genérico que se ve en la ranura cuando está vacía (o cuando el
-	# objeto equipado no trae su propio icon_path). El de ARMA usa la
-	# espada como icono "por defecto"; si equipas un arco o un báculo,
-	# su propio icono sustituye a este automáticamente.
 	var slot_icons := {
 		Equipment.Slot.CABEZA: "res://assets/ui/icons/helmet.png",
 		Equipment.Slot.PECHO: "res://assets/ui/icons/chest.png",
 		Equipment.Slot.MANOS: "res://assets/ui/icons/gloves.png",
 		Equipment.Slot.PIERNAS: "res://assets/ui/icons/legs.png",
 		Equipment.Slot.PIES: "res://assets/ui/icons/boots.png",
-		Equipment.Slot.ACCESORIO_1: "res://assets/ui/icons/ring.png",
-		Equipment.Slot.ACCESORIO_2: "res://assets/ui/icons/ring.png",
-		Equipment.Slot.COLLAR: "res://assets/ui/icons/necklace.png",
-		Equipment.Slot.CINTURON: "res://assets/ui/icons/belt.png",
-		Equipment.Slot.ARMA: "res://assets/ui/icons/weapon_sword.png",
+		Equipment.Slot.ACCESORIO_1: "res://assets/ui/icons/accessory.png",
+		Equipment.Slot.ACCESORIO_2: "res://assets/ui/icons/accessory.png",
+		Equipment.Slot.ARMA: "res://assets/ui/icons/weapon.png",
 		Equipment.Slot.ARMA_SECUNDARIA: "res://assets/ui/icons/shield.png",
 	}
 
-	# Posiciones absolutas alrededor de la silueta (contenedor 280x350).
+	# Mismas posiciones relativas que el "muñeco" de antes, pero como
+	# coordenadas absolutas alrededor de la silueta en vez de una rejilla de texto.
 	var slot_positions := {
-		Equipment.Slot.CABEZA: Vector2(116, 4),
-		Equipment.Slot.COLLAR: Vector2(176, 10),
-		Equipment.Slot.ACCESORIO_1: Vector2(28, 66),
-		Equipment.Slot.PECHO: Vector2(116, 66),
-		Equipment.Slot.ACCESORIO_2: Vector2(204, 66),
-		Equipment.Slot.ARMA_SECUNDARIA: Vector2(28, 128),
-		Equipment.Slot.MANOS: Vector2(116, 128),
-		Equipment.Slot.ARMA: Vector2(204, 128),
-		Equipment.Slot.CINTURON: Vector2(116, 186),
-		Equipment.Slot.PIERNAS: Vector2(116, 240),
-		Equipment.Slot.PIES: Vector2(116, 296),
+		Equipment.Slot.CABEZA: Vector2(104, 8),
+		Equipment.Slot.ACCESORIO_1: Vector2(46, 70),
+		Equipment.Slot.PECHO: Vector2(104, 70),
+		Equipment.Slot.ACCESORIO_2: Vector2(162, 70),
+		Equipment.Slot.ARMA_SECUNDARIA: Vector2(46, 132),
+		Equipment.Slot.MANOS: Vector2(104, 132),
+		Equipment.Slot.ARMA: Vector2(162, 132),
+		Equipment.Slot.PIERNAS: Vector2(104, 194),
+		Equipment.Slot.PIES: Vector2(104, 256),
 	}
 
 	for slot in slot_positions.keys():
@@ -406,7 +357,6 @@ func _build_inventory_ui() -> void:
 func _make_equip_slot_button(icon_path: String) -> Button:
 	var button := ItemSlotButton.new()
 	button.text = ""
-	button.default_icon_path = icon_path
 	if icon_path != "":
 		button.icon = load(icon_path)
 	button.expand_icon = true
@@ -460,14 +410,9 @@ func _refresh_inventory_ui() -> void:
 			style.bg_color = Color(0.169, 0.125, 0.220, 0.85)
 			button.tooltip_empty_text = "%s (vacío)" % slot_name
 			button.tooltip_text = slot_name
-			if button.default_icon_path != "":
-				button.icon = load(button.default_icon_path)
 		else:
 			style.bg_color = item.color
 			button.tooltip_text = item.item_name
-			var icon_to_use: String = item.icon_path if item.icon_path != "" else button.default_icon_path
-			if icon_to_use != "":
-				button.icon = load(icon_to_use)
 
 	for i in range(Inventory.SIZE):
 		var entry = player.inventory.get_at(i)
@@ -647,138 +592,3 @@ func _build_abilities_ui() -> void:
 
 		var sep := HSeparator.new()
 		card.add_child(sep)
-
-
-func _build_crafting_ui() -> void:
-	if ui_canvas == null:
-		return
-
-	var win := _make_window("Crafteo", Vector2(20.0, 100.0))
-	crafting_panel = win["panel"]
-	var box: VBoxContainer = win["box"]
-	box.custom_minimum_size = Vector2(280, 0)
-
-	var hint := Label.new()
-	hint.text = "Recetas disponibles en esta estación:"
-	hint.add_theme_font_size_override("font_size", 12)
-	hint.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
-	box.add_child(hint)
-
-	crafting_list_box = VBoxContainer.new()
-	crafting_list_box.add_theme_constant_override("separation", 10)
-	box.add_child(crafting_list_box)
-
-
-func _refresh_crafting_ui() -> void:
-	for child in crafting_list_box.get_children():
-		child.queue_free()
-
-	for recipe in player.known_recipes:
-		if not recipe.unlocked:
-			continue  # Las bloqueadas solo se consultan en el Recetario (R)
-		crafting_list_box.add_child(_make_recipe_row(recipe, true))
-
-
-func _build_recipes_ui() -> void:
-	if ui_canvas == null:
-		return
-
-	var win := _make_window("Recetario", Vector2(420.0, 100.0))
-	recipes_panel = win["panel"]
-	var box: VBoxContainer = win["box"]
-	box.custom_minimum_size = Vector2(280, 0)
-
-	var hint := Label.new()
-	hint.text = "Todas las recetas conocidas (desbloqueadas y bloqueadas):"
-	hint.add_theme_font_size_override("font_size", 12)
-	hint.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD
-	hint.custom_minimum_size = Vector2(260, 0)
-	box.add_child(hint)
-
-	recipes_list_box = VBoxContainer.new()
-	recipes_list_box.add_theme_constant_override("separation", 10)
-	box.add_child(recipes_list_box)
-
-
-func _refresh_recipes_ui() -> void:
-	for child in recipes_list_box.get_children():
-		child.queue_free()
-
-	for recipe in player.known_recipes:
-		recipes_list_box.add_child(_make_recipe_row(recipe, false))
-
-
-## Construye la fila de una receta. Si "craftable_mode" es true incluye
-## un botón "Craftear" (ventana de la estación); si es false, es de solo
-## lectura y en su lugar muestra la etiqueta Desbloqueada/Bloqueada
-## (ventana del Recetario).
-func _make_recipe_row(recipe: Recipe, craftable_mode: bool) -> Control:
-	var card := VBoxContainer.new()
-	card.add_theme_constant_override("separation", 3)
-
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 8)
-	card.add_child(header)
-
-	var name_label := Label.new()
-	name_label.text = recipe.recipe_name
-	name_label.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
-	name_label.add_theme_font_size_override("font_size", 14)
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(name_label)
-
-	if not craftable_mode:
-		var status_label := Label.new()
-		status_label.add_theme_font_size_override("font_size", 12)
-		if recipe.unlocked:
-			status_label.text = "Desbloqueada"
-			status_label.add_theme_color_override("font_color", Color(0.45, 0.80, 0.50))
-		else:
-			status_label.text = "Bloqueada"
-			status_label.add_theme_color_override("font_color", Color(0.65, 0.62, 0.66))
-		header.add_child(status_label)
-
-	if recipe.description != "":
-		var desc_label := Label.new()
-		desc_label.text = recipe.description
-		desc_label.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
-		desc_label.add_theme_font_size_override("font_size", 11)
-		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-		desc_label.custom_minimum_size = Vector2(250, 0)
-		card.add_child(desc_label)
-
-	for item_id in recipe.materials.keys():
-		var needed: int = recipe.materials[item_id]
-		var have: int = player.count_item(item_id)
-		var mat_item: ItemData = ItemCatalog.get_item(item_id)
-
-		var mat_label := Label.new()
-		mat_label.text = "%s: %d / %d" % [mat_item.item_name, have, needed]
-		mat_label.add_theme_font_size_override("font_size", 12)
-		if have >= needed:
-			mat_label.add_theme_color_override("font_color", Color(0.45, 0.80, 0.50))
-		else:
-			mat_label.add_theme_color_override("font_color", Color(0.90, 0.30, 0.30))
-		card.add_child(mat_label)
-
-	var result_item: ItemData = ItemCatalog.get_item(recipe.result_id)
-	var result_label := Label.new()
-	result_label.text = "Produce: %s x%d" % [result_item.item_name, recipe.result_quantity]
-	result_label.add_theme_font_size_override("font_size", 12)
-	result_label.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
-	card.add_child(result_label)
-
-	if craftable_mode:
-		var craft_button := _make_slot_button("Craftear")
-		craft_button.disabled = not player.can_craft(recipe)
-		craft_button.pressed.connect(_on_craft_pressed.bind(recipe))
-		card.add_child(craft_button)
-
-	card.add_child(HSeparator.new())
-	return card
-
-
-func _on_craft_pressed(recipe: Recipe) -> void:
-	if player.craft(recipe):
-		_refresh_crafting_ui()
