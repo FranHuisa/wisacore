@@ -172,8 +172,18 @@ func _add_starting_items() -> void:
 	belt.stat_bonuses = {"aguante_base": 10.0}
 	inventory.add_item(belt)
 
+	var bracelet := ItemData.new()
+	bracelet.item_name = "Brazalete de Bronce"
+	bracelet.equip_slot = Equipment.Slot.BRAZALETE
+	bracelet.icon_path = "res://assets/ui/icons/bracelet.png"
+	bracelet.color = Color(0.6, 0.5, 0.35)
+	bracelet.rarity = ItemData.Rarity.POCO_COMUN
+	bracelet.description = "Un brazalete pesado de bronce grabado con motivos geométricos."
+	bracelet.stat_bonuses = {"destreza": 2.0}
+	inventory.add_item(bracelet)
+
 	# El set inicial se equipa directamente para que el personaje
-	# empiece ya "vestido" (índices 0-7, en el mismo orden en que se
+	# empiece ya "vestido" (índices 0-8, en el mismo orden en que se
 	# acaban de añadir arriba).
 	equip_from_inventory(0)  # Yelmo de Centinela
 	equip_from_inventory(1)  # Peto Reforzado
@@ -183,6 +193,7 @@ func _add_starting_items() -> void:
 	equip_from_inventory(5)  # Anillo de Fuerza
 	equip_from_inventory(6)  # Collar del Peregrino
 	equip_from_inventory(7)  # Cinturón de Cuero Reforzado
+	equip_from_inventory(8)  # Brazalete de Bronce
 
 	# Segundo casco (sin equipar, se queda en la mochila) para poder
 	# probar la comparación "nuevo vs. equipado": mejora estabilidad
@@ -292,6 +303,89 @@ func unequip_to_inventory(slot: int) -> void:
 
 	equipment.unequip(slot)
 	inventory.set_at(free_index, {"item": item, "quantity": 1})
+
+	recalculate_stats()
+	inventory_changed.emit()
+
+
+## --- Usadas por el arrastrar y soltar del inventario ---
+
+## Dos anillos son intercambiables entre sí; el resto de ranuras solo
+## aceptan su propio tipo exacto de objeto.
+func _slot_compatible(item_slot: int, target_slot: int) -> bool:
+	if item_slot == target_slot:
+		return true
+	var rings := [Equipment.Slot.ACCESORIO_1, Equipment.Slot.ACCESORIO_2]
+	return item_slot in rings and target_slot in rings
+
+
+## Arrastrar un objeto de una casilla de la mochila a otra: las
+## intercambia (si el destino está vacío, simplemente se mueve).
+func move_backpack_item(from_index: int, to_index: int) -> void:
+	if from_index == to_index or from_index < 0 or to_index < 0:
+		return
+	var a = inventory.get_at(from_index)
+	var b = inventory.get_at(to_index)
+	inventory.set_at(from_index, b)
+	inventory.set_at(to_index, a)
+	inventory_changed.emit()
+
+
+## Arrastrar un objeto de la mochila a una ranura de equipo concreta
+## (no necesariamente a la que tenga asignada por defecto: p. ej. un
+## anillo se puede soltar en Anillo 1 o en Anillo 2).
+func equip_from_inventory_to_slot(inventory_index: int, target_slot: int) -> void:
+	var entry = inventory.get_at(inventory_index)
+	if entry == null:
+		return
+	var item: ItemData = entry["item"]
+	if item.equip_slot == -1 or not _slot_compatible(item.equip_slot, target_slot):
+		return  # No es equipable, o no encaja en esta ranura.
+
+	var previous: ItemData = equipment.slots.get(target_slot)
+	equipment.slots[target_slot] = item
+	inventory.remove_at(inventory_index)
+	if previous != null:
+		inventory.set_at(inventory_index, {"item": previous, "quantity": 1})
+
+	recalculate_stats()
+	inventory_changed.emit()
+
+
+## Arrastrar un objeto equipado a una casilla concreta de la mochila
+## (si esa casilla ya tiene algo compatible con la ranura de origen,
+## se intercambian; si está vacía, simplemente se desequipa ahí).
+func unequip_to_index(from_slot: int, to_index: int) -> void:
+	var item: ItemData = equipment.slots.get(from_slot)
+	if item == null:
+		return
+	var existing = inventory.get_at(to_index)
+	if existing != null:
+		var existing_item: ItemData = existing["item"]
+		if existing_item.equip_slot == -1 or not _slot_compatible(existing_item.equip_slot, from_slot):
+			return  # La casilla ya tiene algo que no se puede equipar aquí.
+		equipment.slots[from_slot] = existing_item
+	else:
+		equipment.slots[from_slot] = null
+	inventory.set_at(to_index, {"item": item, "quantity": 1})
+
+	recalculate_stats()
+	inventory_changed.emit()
+
+
+## Arrastrar un objeto equipado de una ranura a otra (p. ej. Anillo 1
+## a Anillo 2). Si ambas tienen algo puesto, se intercambian.
+func swap_equipped(slot_a: int, slot_b: int) -> void:
+	if slot_a == slot_b:
+		return
+	var item_a: ItemData = equipment.slots.get(slot_a)
+	var item_b: ItemData = equipment.slots.get(slot_b)
+	if item_a != null and not _slot_compatible(item_a.equip_slot, slot_b):
+		return
+	if item_b != null and not _slot_compatible(item_b.equip_slot, slot_a):
+		return
+	equipment.slots[slot_a] = item_b
+	equipment.slots[slot_b] = item_a
 
 	recalculate_stats()
 	inventory_changed.emit()

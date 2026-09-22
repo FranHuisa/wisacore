@@ -328,13 +328,21 @@ func _build_inventory_ui() -> void:
 
 	var paperdoll := Control.new()
 	paperdoll.custom_minimum_size = Vector2(320, 380)
+	paperdoll.clip_contents = true
 	window_box.add_child(paperdoll)
 
 	var silhouette := TextureRect.new()
 	silhouette.texture = load("res://assets/ui/character_silhouette.png")
-	silhouette.position = Vector2(95, 24)
-	silhouette.size = Vector2(130, 323)
-	silhouette.stretch_mode = TextureRect.STRETCH_SCALE
+	silhouette.anchor_left = 0.30
+	silhouette.anchor_right = 0.70
+	silhouette.anchor_top = 0.06
+	silhouette.anchor_bottom = 0.91
+	silhouette.offset_left = 0
+	silhouette.offset_right = 0
+	silhouette.offset_top = 0
+	silhouette.offset_bottom = 0
+	silhouette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	silhouette.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	silhouette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	silhouette.modulate = Color(1, 1, 1, 0.35)
 	paperdoll.add_child(silhouette)
@@ -353,24 +361,28 @@ func _build_inventory_ui() -> void:
 		Equipment.Slot.ACCESORIO_2: "res://assets/ui/icons/ring.png",
 		Equipment.Slot.COLLAR: "res://assets/ui/icons/necklace.png",
 		Equipment.Slot.CINTURON: "res://assets/ui/icons/belt.png",
+		Equipment.Slot.BRAZALETE: "res://assets/ui/icons/bracelet.png",
 		Equipment.Slot.ARMA: "res://assets/ui/icons/weapon_sword.png",
 		Equipment.Slot.ARMA_SECUNDARIA: "res://assets/ui/icons/shield.png",
 	}
 
 	# Dos columnas de ranuras, una a cada lado de la silueta (contenedor
-	# 320x380): columna izquierda con la armadura de cuerpo, columna
-	# derecha con manos/anillos/armas.
+	# 320x380). Orden pedido:
+	#   Casco - Colgante        Guantes - Cinturón
+	#   Pechera - Anillo        Botas -
+	#   Pantalón - Anillo       Arma - Escudo
 	var slot_positions := {
 		Equipment.Slot.CABEZA: Vector2(16, 6),
-		Equipment.Slot.COLLAR: Vector2(16, 68),
-		Equipment.Slot.PECHO: Vector2(16, 130),
-		Equipment.Slot.CINTURON: Vector2(16, 192),
-		Equipment.Slot.PIERNAS: Vector2(16, 254),
-		Equipment.Slot.PIES: Vector2(16, 316),
-		Equipment.Slot.MANOS: Vector2(256, 6),
-		Equipment.Slot.ACCESORIO_1: Vector2(256, 84),
-		Equipment.Slot.ARMA: Vector2(256, 161),
-		Equipment.Slot.ACCESORIO_2: Vector2(256, 238),
+		Equipment.Slot.PECHO: Vector2(16, 68),
+		Equipment.Slot.PIERNAS: Vector2(16, 130),
+		Equipment.Slot.MANOS: Vector2(16, 192),
+		Equipment.Slot.PIES: Vector2(16, 254),
+		Equipment.Slot.ARMA: Vector2(16, 316),
+		Equipment.Slot.COLLAR: Vector2(256, 6),
+		Equipment.Slot.ACCESORIO_1: Vector2(256, 68),
+		Equipment.Slot.ACCESORIO_2: Vector2(256, 130),
+		Equipment.Slot.CINTURON: Vector2(256, 192),
+		Equipment.Slot.BRAZALETE: Vector2(256, 254),
 		Equipment.Slot.ARMA_SECUNDARIA: Vector2(256, 316),
 	}
 
@@ -380,6 +392,9 @@ func _build_inventory_ui() -> void:
 		button.custom_minimum_size = Vector2(48, 48)
 		button.size = Vector2(48, 48)
 		button.pressed.connect(_on_equipment_slot_pressed.bind(slot))
+		button.slot_kind = "equip"
+		button.equip_slot_id = slot
+		button.on_drop = _handle_item_drop
 		paperdoll.add_child(button)
 		equipment_buttons[slot] = button
 
@@ -401,11 +416,14 @@ func _build_inventory_ui() -> void:
 		var button := _make_slot_button("")
 		button.custom_minimum_size = Vector2(48, 44)
 		button.pressed.connect(_on_backpack_slot_pressed.bind(i))
+		button.slot_kind = "backpack"
+		button.backpack_index = i
+		button.on_drop = _handle_item_drop
 		grid.add_child(button)
 		backpack_buttons.append(button)
 
 
-func _make_equip_slot_button(icon_path: String) -> Button:
+func _make_equip_slot_button(icon_path: String) -> ItemSlotButton:
 	var button := ItemSlotButton.new()
 	button.text = ""
 	button.default_icon_path = icon_path
@@ -430,7 +448,7 @@ func _make_equip_slot_button(icon_path: String) -> Button:
 	return button
 
 
-func _make_slot_button(text: String) -> Button:
+func _make_slot_button(text: String) -> ItemSlotButton:
 	var button := ItemSlotButton.new()
 	button.text = text
 	button.clip_text = true
@@ -504,6 +522,20 @@ func _on_equipment_slot_pressed(slot: int) -> void:
 
 func _on_backpack_slot_pressed(index: int) -> void:
 	player.equip_from_inventory(index)
+
+
+func _handle_item_drop(data: Dictionary, target: ItemSlotButton) -> void:
+	if target.slot_kind == "backpack":
+		if data.get("kind") == "backpack":
+			player.move_backpack_item(data["backpack_index"], target.backpack_index)
+		elif data.get("kind") == "equip":
+			player.unequip_to_index(data["equip_slot"], target.backpack_index)
+	elif target.slot_kind == "equip":
+		if data.get("kind") == "backpack":
+			player.equip_from_inventory_to_slot(data["backpack_index"], target.equip_slot_id)
+		elif data.get("kind") == "equip":
+			player.swap_equipped(data["equip_slot"], target.equip_slot_id)
+	_refresh_inventory_ui()
 
 
 func _on_ability_cooldown_changed(ability_name: String, time_left: float, max_time: float) -> void:

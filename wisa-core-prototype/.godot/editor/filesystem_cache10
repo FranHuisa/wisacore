@@ -401,9 +401,11 @@ roof_c.png::CompressedTexture2D::6714151860275401380::1789909309::1789931941::1:
 roof_d.png::CompressedTexture2D::5229585345817295719::1789909309::1789931941::1::::<><><>0<>0<>31c39c5609d4fae3c452a71bdae19d37<>res://.godot/imported/roof_d.png-0f386b522f1e62962647cc4efd6f3c46.ctex::
 ::res://assets/ui/::1790040915
 character_silhouette.png::CompressedTexture2D::2631372049282506314::1790040913::1790040915::1::::<><><>0<>0<>b378a0d476b3a146439ee665b5b5809d<>res://.godot/imported/character_silhouette.png-96ab8af21ed7369b2d4dc9aa3b9ca6b7.ctex::
-::res://assets/ui/icons/::1790039696
+::res://assets/ui/icons/::1790070474
 belt.png::CompressedTexture2D::7320343715237950160::1790039653::1790039696::1::::<><><>0<>0<>350cb6434f2a5b528459ed9b9eece2ed<>res://.godot/imported/belt.png-ed49848d2726588075e1b8d09aab2b60.ctex::
 boots.png::CompressedTexture2D::2516757642931743550::1790039653::1790039696::1::::<><><>0<>0<>1063c53462dc1df80bca71d67358b266<>res://.godot/imported/boots.png-67ed0a36c067c4b0308741af66fa485c.ctex::
+bracelet.jpg::CompressedTexture2D::3776907044103422709::1790070402::1790070480::1::::<><><>0<>0<>93b9c3aab6237bfbed607b0d4058b93d<>res://.godot/imported/bracelet.jpg-c2d218899375e122164a859efca3bcc2.ctex::
+bracelet.png::CompressedTexture2D::2672524402563567853::1790070474::1790070480::1::::<><><>0<>0<>bdef55217134e4189bd7b70f9549adce<>res://.godot/imported/bracelet.png-f17f639c01c219f7a6601982fa351802.ctex::
 chest.png::CompressedTexture2D::1720718302720421008::1790039653::1790039696::1::::<><><>0<>0<>70f969bb7833a11262a1ee1354fd90ae<>res://.godot/imported/chest.png-240afbe3dd01f16a59474bfd989a961a.ctex::
 gloves.png::CompressedTexture2D::5160386903990665325::1790039653::1790039696::1::::<><><>0<>0<>12fd316d7a6a28bc464708c9c348d3d4<>res://.godot/imported/gloves.png-bbbb314ad647626aa06120cd52b74ef8.ctex::
 helmet.png::CompressedTexture2D::341436376579219303::1790039653::1790039696::1::::<><><>0<>0<>1cc747d8e463427d9b186f931d43f512<>res://.godot/imported/helmet.png-375162849c8f77aeaed42b738be96ef4.ctex::
@@ -589,18 +591,18 @@ Enemy.tscn::PackedScene::-1::1789925658::0::1::::<><><>0<>0<><>::res://scripts/e
 Main.tscn::PackedScene::1104726498327551370::1790034800::0::1::::<><><>0<>0<><>::res://scenes/Player.tscn<>res://scenes/Enemy.tscn<>uid://cm6vr1s2m6qgb::::res://scripts/main.gd<>uid://ci4v561asmcjo::::res://assets/ground/assest/grasstile1.png<>res://assets/wall/wall_1/corner_s.png<>res://assets/roof/roof_6/roof_a.png<>res://assets/roof/roof_6/roof_c.png<>res://assets/roof/roof_6/roof_b.png<>res://assets/ground/assest/dirttextile.png<>res://assets/construction wood/fence1.png<>res://assets/construction wood/stall1.png<>res://assets/blocks/128/wood 128.png<>res://assets/construction wood/stall2.png<>res://scripts/crafting_station.gd
 MainMenu.tscn::PackedScene::-1::1789925658::0::1::::<><><>0<>0<><>::res://scripts/main_menu.gd
 Player.tscn::PackedScene::-1::1789925658::0::1::::<><><>0<>0<><>::res://scripts/player.gd
-::res://scripts/::1790041240
+::res://scripts/::1790069948
 crafting_station.gd::GDScript::8910608031008455125::1790034825::0::1::::CraftingStation<>Area2D<><>0<>0<><>::
 drag_handle.gd::GDScript::8405233368803454433::1789925658::0::1::::<>HBoxContainer<><>0<>0<><>::
 enemy.gd::GDScript::9073767084274687436::1789925658::0::1::::<>CharacterBody2D<><>0<>0<><>::
-equipment.gd::GDScript::5560116320851716182::1790039747::0::1::::Equipment<>Resource<><>0<>0<><>::
+equipment.gd::GDScript::5560116320851716182::1790069937::0::1::::Equipment<>Resource<><>0<>0<><>::
 inventory.gd::GDScript::8116033415202399752::1790034812::0::1::::Inventory<>Resource<><>0<>0<><>::
 item_catalog.gd::GDScript::8852187566491324827::1790034817::0::1::::ItemCatalog<>Resource<><>0<>0<><>::
 item_data.gd::GDScript::3324563920930020120::1790040497::0::1::::ItemData<>Resource<><>0<>0<><>::
-item_slot_button.gd::GDScript::6130446720033304454::1790039762::0::1::::ItemSlotButton<>Button<><>0<>0<><>::
-main.gd::GDScript::5680410011420535589::1790041224::0::1::::<>Node2D<><>0<>0<><>::
+item_slot_button.gd::GDScript::6130446720033304454::1790069559::0::1::::ItemSlotButton<>Button<><>0<>0<><>::
+main.gd::GDScript::5680410011420535589::1790069935::0::1::::<>Node2D<><>0<>0<><>::
 main_menu.gd::GDScript::1270114389060630674::1789925658::0::1::::<>Control<><>0<>0<><>::
-player.gd::GDScript::2234218483532542069::1790039773::0::1::::<>CharacterBody2D<><>0<>0<><>::
+player.gd::GDScript::2234218483532542069::1790069934::0::1::::<>CharacterBody2D<><>0<>0<><>::
 recipe.gd::GDScript::5233860808272547778::1790034820::0::1::::Recipe<>Resource<><>0<>0<><>::
 recipe_database.gd::GDScript::3690055525056408269::1790034823::0::1::::RecipeDatabase<>Resource<><>0<>0<><>::
 stat_block.gd::GDScript::5648632017858054898::1789925658::0::1::::StatBlock<>Resource<><>0<>0<><>::

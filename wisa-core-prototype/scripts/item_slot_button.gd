@@ -23,6 +23,19 @@ var compare_item: ItemData = null
 ## equipado no tiene su propio icon_path (ranuras de equipo únicamente).
 var default_icon_path: String = ""
 
+## =========================================================
+## Arrastrar y soltar
+## =========================================================
+
+## "backpack" o "equip". Lo asigna main.gd al crear el botón.
+var slot_kind: String = "backpack"
+var backpack_index: int = -1          # Válido si slot_kind == "backpack"
+var equip_slot_id: int = -1           # Válido si slot_kind == "equip" (Equipment.Slot)
+
+## Callable(data: Dictionary, target: ItemSlotButton) asignado por main.gd,
+## que decide qué hacer cuando se suelta algo sobre este botón.
+var on_drop: Callable
+
 const RARITY_NAMES := {
 	ItemData.Rarity.COMUN: "Común",
 	ItemData.Rarity.POCO_COMUN: "Poco común",
@@ -215,3 +228,58 @@ func _format_number(value: float) -> String:
 	if value == int(value):
 		return str(int(value))
 	return "%.1f" % value
+
+
+## --- Arrastrar y soltar (API nativa de Godot Control) ---
+
+func _get_drag_data(_at_position: Vector2) -> Variant:
+	if tooltip_item == null:
+		return null
+
+	var preview: Control
+	if icon != null:
+		var tex := TextureRect.new()
+		tex.texture = icon
+		tex.custom_minimum_size = Vector2(40, 40)
+		tex.size = Vector2(40, 40)
+		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		preview = tex
+	else:
+		var label := Label.new()
+		label.text = tooltip_item.item_name
+		label.add_theme_color_override("font_color", Color(0.9, 0.88, 0.92))
+		preview = label
+	preview.modulate = Color(1, 1, 1, 0.85)
+	set_drag_preview(preview)
+
+	return {
+		"kind": slot_kind,
+		"backpack_index": backpack_index,
+		"equip_slot": equip_slot_id,
+		"item": tooltip_item,
+	}
+
+
+func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
+	if not (data is Dictionary and data.has("kind")):
+		return false
+	if slot_kind != "equip":
+		return true  # La mochila acepta cualquier objeto en cualquier hueco.
+	var item: ItemData = data.get("item")
+	if item == null:
+		return false
+	return _is_slot_compatible(item.equip_slot, equip_slot_id)
+
+
+func _drop_data(_at_position: Vector2, data: Variant) -> void:
+	if on_drop.is_valid():
+		on_drop.call(data, self)
+
+
+## Los dos huecos de anillo se consideran intercambiables entre sí.
+func _is_slot_compatible(item_slot: int, target_slot: int) -> bool:
+	if item_slot == target_slot:
+		return true
+	var rings := [Equipment.Slot.ACCESORIO_1, Equipment.Slot.ACCESORIO_2]
+	return item_slot in rings and target_slot in rings
