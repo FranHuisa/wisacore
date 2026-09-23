@@ -1257,7 +1257,8 @@ func _build_skill_tree_ui() -> void:
 
 	# --- Agrupar los nodos por rama, conservando el orden en que
 	# aparecen en SkillTreeDatabase (así las pestañas salen en ese
-	# mismo orden: Combate, Resistencia, Agilidad...). ---
+	# mismo orden: Guerrero, Pícaro, Clérigo, Mago, Ingeniero,
+	# Elaboración, Ingeniería, Competencias...). ---
 	var branch_order: Array = []
 	var branch_nodes: Dictionary = {}
 	for node in player.skill_tree_nodes:
@@ -1267,11 +1268,12 @@ func _build_skill_tree_ui() -> void:
 		branch_nodes[node.branch].append(node)
 
 	var tabs := TabContainer.new()
-	# Con 5 columnas por rama el contenido de cada pestaña ya no cabe en
-	# los 320x320 de antes (2 columnas); esto es solo un mínimo de
-	# partida, el tab_area real de cada rama (más abajo) crece según
-	# max_col/max_row y el TabContainer se ajusta a su hijo más grande.
-	tabs.custom_minimum_size = Vector2(540, 340)
+	# Con 5 columnas x 5 niveles por rama el contenido de cada pestaña ya
+	# no cabe en los 320x320 de antes (2 columnas x 3 niveles); esto es
+	# solo un mínimo de partida, el tab_area real de cada rama (más
+	# abajo) crece según max_col/max_row y el TabContainer se ajusta a
+	# su hijo más grande.
+	tabs.custom_minimum_size = Vector2(540, 540)
 	var tabs_panel_style := StyleBoxFlat.new()
 	tabs_panel_style.bg_color = Color(0.11, 0.09, 0.14, 0.98)
 	tabs_panel_style.border_color = Color(0.039, 0.031, 0.063)
