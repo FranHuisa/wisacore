@@ -1225,10 +1225,11 @@ func _on_claim_quest_pressed(quest: Quest) -> void:
 ## BASE de partida: una pestaña por rama (SkillNode.branch), y dentro
 ## de cada pestaña los nodos se dibujan de ABAJO hacia ARRIBA (el nivel
 ## 0 de grid_position.y queda pegado al fondo del área, y sube según
-## crece grid_position.y). Con 2 columnas por nivel y cada nodo
-## exigiendo el de la columna OPUESTA del nivel de abajo (ver
-## skill_tree_database.gd), las líneas de conexión se cruzan formando
-## una X entre cada dos niveles. El contenido real (ramas, nombres,
+## crece grid_position.y). Con 5 columnas por nivel y cada nodo
+## exigiendo sus dos VECINOS diagonales del nivel de abajo (columna - 1
+## y columna + 1, ver skill_tree_database.gd), las líneas de conexión
+## se cruzan formando una X entre cada dos columnas vecinas, repetida
+## a lo largo de toda la fila. El contenido real (ramas, nombres,
 ## columnas, niveles, bonus, costes) se ajusta por completo en
 ## scripts/skill_tree_database.gd sin tocar nada de esta ventana.
 
