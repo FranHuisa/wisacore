@@ -64,6 +64,12 @@ var skill_points_label: Label
 var tree_entries: Dictionary = {}
 var tree_view_buttons: Dictionary = {}
 
+## Botón "Mostrar ramas generales" del árbol de Efectos y si esas
+## ramas (SkillTreeDatabase.EXTRA_BRANCH_NAMES) están visibles ahora
+## mismo. Ver _toggle_effects_extra_branches().
+var effects_extra_toggle_button: Button
+var effects_extra_shown: bool = false
+
 const SKILL_CELL_SIZE := Vector2(90, 90)
 const SKILL_NODE_SIZE := Vector2(56, 56)
 const SKILL_TREE_ORIGIN := Vector2(30, 30)
@@ -136,6 +142,7 @@ func _ready() -> void:
 	_build_controls_ui()
 	_build_pause_menu_ui()
 	_build_music()
+	get_viewport().size_changed.connect(_center_skill_tree_ui)
 
 	crafting_station.player_entered_range.connect(_on_crafting_range_entered)
 	crafting_station.player_exited_range.connect(_on_crafting_range_exited)
@@ -188,7 +195,7 @@ func _input(event: InputEvent) -> void:
 	elif event.physical_keycode == GameSave.get_keybind("quests"):
 		_toggle_window(quests_panel, _refresh_quests_ui)
 	elif event.physical_keycode == GameSave.get_keybind("skills"):
-		_toggle_window(skill_tree_panel, _refresh_all_trees)
+		_toggle_window(skill_tree_panel, _on_open_skill_tree_window)
 	elif event.physical_keycode == GameSave.get_keybind("controls"):
 		_toggle_window(controls_panel, _refresh_controls_ui)
 	elif event.physical_keycode == GameSave.get_keybind("craft"):
@@ -209,6 +216,21 @@ func _toggle_window(panel: Control, on_open_refresh: Callable) -> void:
 	panel.visible = not panel.visible
 	if panel.visible and on_open_refresh.is_valid():
 		on_open_refresh.call()
+
+
+## Al abrir la ventana de Árboles: refresca los 3 árboles y la centra
+## en pantalla (ver _center_skill_tree_ui). "call_deferred" porque el
+## tamaño real del panel (panel.size) no está listo hasta que el motor
+## termina de acomodar el layout del árbol que se esté mostrando.
+func _on_open_skill_tree_window() -> void:
+	_refresh_all_trees()
+	call_deferred("_center_skill_tree_ui")
+
+
+func _center_skill_tree_ui() -> void:
+	if skill_tree_panel != null and skill_tree_panel.visible:
+		var vp_size := get_viewport().get_visible_rect().size
+		skill_tree_panel.position = ((vp_size - skill_tree_panel.size) / 2.0).round()
 
 
 func _on_crafting_range_entered() -> void:
@@ -1307,6 +1329,25 @@ func _build_skill_tree_ui() -> void:
 	for key in ["recipes", "effects", "weapons"]:
 		box.add_child(tree_entries[key]["view"])
 
+	# --- Efectos: 5 pestañas de clase (Guerrero, Pícaro, Clérigo, Mago,
+	# Ingeniero) visibles por defecto; las 3 "generales" (Crafteo,
+	# Competencias, Ingeniería - no son de una clase) empiezan ocultas
+	# y este botón las muestra/oculta, para diferenciarlas de las 5 que
+	# pidió el usuario. Un TabContainer no muestra como pestaña a un
+	# hijo con visible=false, así que basta con eso. ---
+	var effects_view: VBoxContainer = tree_entries["effects"]["view"]
+	var effects_tabs: TabContainer = tree_entries["effects"]["tabs"]
+	var effects_branch_tab_index: Dictionary = tree_entries["effects"]["branch_tab_index"]
+	for branch_name in SkillTreeDatabase.EXTRA_BRANCH_NAMES:
+		if effects_branch_tab_index.has(branch_name):
+			effects_tabs.set_tab_hidden(effects_branch_tab_index[branch_name], true)
+
+	effects_extra_toggle_button = _make_slot_button("")
+	effects_extra_toggle_button.pressed.connect(_toggle_effects_extra_branches)
+	effects_view.add_child(effects_extra_toggle_button)
+	effects_view.move_child(effects_extra_toggle_button, 0)
+	_update_effects_extra_toggle_label()
+
 	_show_tree_view("effects")
 	_refresh_all_trees()
 
@@ -1321,6 +1362,42 @@ func _show_tree_view(which: String) -> void:
 	for key in tree_view_buttons.keys():
 		var button: Button = tree_view_buttons[key]
 		button.disabled = (key == which)
+	# La ventana cambia de tamaño según el árbol que se muestre (ver
+	# _build_skill_tree_ui), así que hay que recentrarla también aquí,
+	# no solo al abrir la ventana con T.
+	call_deferred("_center_skill_tree_ui")
+
+
+## Muestra/oculta las 3 pestañas "generales" del árbol de Efectos
+## (SkillTreeDatabase.EXTRA_BRANCH_NAMES: Crafteo, Competencias,
+## Ingeniería), para diferenciarlas de las 5 pestañas de clase
+## (Guerrero, Pícaro, Clérigo, Mago, Ingeniero) que están siempre
+## visibles.
+##
+## OJO: dentro de un TabContainer, "child.visible" NO sirve para esto
+## -- el propio TabContainer pone visible=false a toda pestaña que no
+## sea la seleccionada (así "cambia" de pestaña), así que tocar
+## "visible" a mano no tiene ningún efecto real sobre si aparece en la
+## barra. Lo que sí oculta una pestaña de la barra (sin borrar su
+## contenido) es TabContainer.set_tab_hidden(indice, true).
+func _toggle_effects_extra_branches() -> void:
+	effects_extra_shown = not effects_extra_shown
+	var tabs: TabContainer = tree_entries["effects"]["tabs"]
+	var branch_tab_index: Dictionary = tree_entries["effects"]["branch_tab_index"]
+	for branch_name in SkillTreeDatabase.EXTRA_BRANCH_NAMES:
+		if branch_tab_index.has(branch_name):
+			tabs.set_tab_hidden(branch_tab_index[branch_name], not effects_extra_shown)
+	_update_effects_extra_toggle_label()
+	call_deferred("_center_skill_tree_ui")
+
+
+func _update_effects_extra_toggle_label() -> void:
+	if effects_extra_toggle_button == null:
+		return
+	if effects_extra_shown:
+		effects_extra_toggle_button.text = "Ocultar ramas generales"
+	else:
+		effects_extra_toggle_button.text = "Mostrar ramas generales (Crafteo · Competencias · Ingeniería)"
 
 
 ## Construye una vista de árbol genérica: agrupa "nodes" por rama
@@ -1370,6 +1447,8 @@ func _build_tree_view(nodes: Array, is_unlocked_fn: Callable, can_unlock_fn: Cal
 
 	var buttons: Dictionary = {}
 	var lines: Array = []
+	var branch_tabs: Dictionary = {}
+	var branch_tab_index: Dictionary = {}
 
 	for branch in branch_order:
 		var nodes_in_branch: Array = branch_nodes[branch]
@@ -1383,7 +1462,9 @@ func _build_tree_view(nodes: Array, is_unlocked_fn: Callable, can_unlock_fn: Cal
 		var tab_area := Control.new()
 		tab_area.name = branch if branch != "" else "General"
 		tab_area.custom_minimum_size = SKILL_TREE_ORIGIN * 2.0 + Vector2(max_col + 1, max_row + 1) * SKILL_CELL_SIZE
+		branch_tab_index[branch] = tabs.get_child_count()
 		tabs.add_child(tab_area)
+		branch_tabs[branch] = tab_area
 
 		for node in nodes_in_branch:
 			for required_id in node.requires:
@@ -1416,6 +1497,9 @@ func _build_tree_view(nodes: Array, is_unlocked_fn: Callable, can_unlock_fn: Cal
 		"lines": lines,
 		"is_unlocked_fn": is_unlocked_fn,
 		"can_unlock_fn": can_unlock_fn,
+		"tabs": tabs,
+		"branch_tabs": branch_tabs,
+		"branch_tab_index": branch_tab_index,
 	}
 
 

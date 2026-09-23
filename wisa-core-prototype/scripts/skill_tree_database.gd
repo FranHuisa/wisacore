@@ -22,6 +22,17 @@ class_name SkillTreeDatabase
 ## Igual que RecipeDatabase/QuestDatabase: crea instancias NUEVAS cada
 ## vez que se llama, así que player.gd la llama una sola vez en
 ## _ready() y guarda el resultado en Player.skill_tree_nodes.
+##
+## Las 5 primeras ramas (CLASS_BRANCH_NAMES) son las "pestañas de clase"
+## que pidió el usuario (Guerrero, Pícaro, Clérigo, Mago, Ingeniero) y
+## están visibles por defecto en la ventana de Árboles. Las 3 restantes
+## (EXTRA_BRANCH_NAMES: Crafteo, Competencias, Ingeniería) son las
+## "pestañas generales" - no son de una clase concreta, así que
+## main.gd las oculta al abrir la ventana y las muestra con el botón
+## "Mostrar ramas generales" (ver _build_skill_tree_ui/
+## _toggle_effects_extra_branches en main.gd). Los nombres de aquí son
+## la fuente única de verdad para esa lista, así main.gd no repite los
+## nombres de rama a mano.
 ## =========================================================
 
 const COLUMNS := 5
@@ -33,10 +44,17 @@ const BRANCHES := [
 	{"key": "clerigo", "name": "Clérigo", "color": Color(0.85, 0.75, 0.35), "stat": "voluntad"},
 	{"key": "mago", "name": "Mago", "color": Color(0.45, 0.35, 0.75), "stat": "canalizacion"},
 	{"key": "ingeniero", "name": "Ingeniero", "color": Color(0.80, 0.50, 0.20), "stat": "destreza"},
-	{"key": "elaboracion", "name": "Elaboración", "color": Color(0.30, 0.65, 0.65), "stat": "punteria"},
+	{"key": "crafteo", "name": "Crafteo", "color": Color(0.30, 0.65, 0.65), "stat": "punteria"},
 	{"key": "ingenieria", "name": "Ingeniería", "color": Color(0.35, 0.45, 0.65), "stat": "conexion_elemental"},
 	{"key": "competencias", "name": "Competencias", "color": Color(0.55, 0.55, 0.55), "stat": "estabilidad"},
 ]
+
+## Pestañas de clase, visibles por defecto en Efectos.
+const CLASS_BRANCH_NAMES := ["Guerrero", "Pícaro", "Clérigo", "Mago", "Ingeniero"]
+
+## Pestañas "generales" (no son de una clase): ocultas hasta que se
+## pulsa el botón "Mostrar ramas generales" en la ventana de Árboles.
+const EXTRA_BRANCH_NAMES := ["Crafteo", "Competencias", "Ingeniería"]
 
 
 static func get_all_nodes() -> Array[SkillNode]:
