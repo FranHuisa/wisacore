@@ -22,6 +22,10 @@ var master_bus_index: int
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	master_bus_index = AudioServer.get_bus_index("Master")
+	AudioServer.set_bus_volume_db(master_bus_index, linear_to_db(GameSave.get_master_volume()))
+	AudioServer.set_bus_mute(master_bus_index, GameSave.get_master_muted())
+	if GameSave.get_fullscreen():
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 	var bg := ColorRect.new()
 	bg.color = BG_COLOR
@@ -107,7 +111,11 @@ func _build_settings() -> void:
 	volume_slider.min_value = 0.0
 	volume_slider.max_value = 1.0
 	volume_slider.step = 0.01
-	volume_slider.value = db_to_linear(AudioServer.get_bus_volume_db(master_bus_index))
+	# El volumen (y la pantalla completa, más abajo) ahora se guardan en
+	# GameSave -- ver el mismo ajuste en el menú de pausa dentro de la
+	# partida (main.gd) -- así que se parte de lo guardado en vez de leer
+	# solo el estado actual del bus de audio.
+	volume_slider.value = GameSave.get_master_volume()
 	volume_slider.value_changed.connect(_on_volume_changed)
 	settings_box.add_child(volume_slider)
 
@@ -166,6 +174,7 @@ func _on_quit_pressed() -> void:
 
 func _on_volume_changed(value: float) -> void:
 	AudioServer.set_bus_volume_db(master_bus_index, linear_to_db(value))
+	GameSave.set_master_volume(value)
 
 
 func _on_fullscreen_toggled(pressed: bool) -> void:
@@ -173,3 +182,4 @@ func _on_fullscreen_toggled(pressed: bool) -> void:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	GameSave.set_fullscreen(pressed)

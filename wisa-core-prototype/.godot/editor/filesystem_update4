@@ -1,2 +1,3 @@
 res://scripts/main.gd
 res://scripts/player.gd
+res://scripts/skill_tree_database.gd

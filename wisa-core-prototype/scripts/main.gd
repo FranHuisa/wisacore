@@ -61,8 +61,41 @@ const SKILL_CELL_SIZE := Vector2(90, 90)
 const SKILL_NODE_SIZE := Vector2(56, 56)
 const SKILL_TREE_ORIGIN := Vector2(30, 30)
 
+## --- Ventana pequeña de controles (antes era un texto siempre visible) ---
+var controls_panel: Control
+var controls_text_label: Label
+var controls_hint_label: Label
+
+## --- Menú de pausa (ESC) y Ajustes ---
+var pause_dim: ColorRect
+var pause_menu_panel: Control
+var settings_panel: Control
+var settings_tabs: TabContainer
+var volume_slider: HSlider
+var fullscreen_check: CheckButton
+var mute_check: CheckButton
+var master_bus_index: int = 0
+
+## Rebind de teclas (solo las que abren ventanas, ver GameSave.DEFAULT_KEYBINDS).
+var rebind_buttons: Dictionary = {}
+var rebinding_action: String = ""
+
+const KEYBIND_LABELS := {
+	"inventory": "Inventario",
+	"character": "Personaje",
+	"abilities": "Habilidades",
+	"quests": "Misiones",
+	"skills": "Árbol de habilidades",
+	"recipes": "Recetario",
+	"craft": "Interactuar / Craftear",
+	"pickup": "Recoger objeto",
+	"controls": "Ventana de controles",
+}
+const KEYBIND_ORDER := ["inventory", "character", "abilities", "quests", "skills", "recipes", "craft", "pickup", "controls"]
+
 
 func _ready() -> void:
+	_apply_saved_display_and_audio_settings()
 	_build_ui()
 	player.health_changed.connect(_on_player_health_changed)
 	player.stamina_changed.connect(_on_player_stamina_changed)
@@ -84,6 +117,8 @@ func _ready() -> void:
 	_build_recipes_ui()
 	_build_quests_ui()
 	_build_skill_tree_ui()
+	_build_controls_ui()
+	_build_pause_menu_ui()
 
 	crafting_station.player_entered_range.connect(_on_crafting_range_entered)
 	crafting_station.player_exited_range.connect(_on_crafting_range_exited)
@@ -91,37 +126,64 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+
+	# --- Captura de tecla mientras se está reasignando un atajo desde
+	# Ajustes > Controles. Tiene prioridad sobre todo lo demás: cualquier
+	# tecla (menos ESC, que cancela) se guarda como la nueva tecla. ---
+	if rebinding_action != "":
 		if event.physical_keycode == KEY_ESCAPE:
+			_cancel_rebind()
+		else:
+			_finish_rebind(event.physical_keycode)
+		get_viewport().set_input_as_handled()
+		return
+
+	if event.physical_keycode == KEY_ESCAPE:
+		if settings_panel.visible:
+			_close_settings()
+		elif pause_menu_panel.visible:
+			_close_pause_menu()
+		else:
 			var closed_something := false
 			for w in floating_windows:
 				if w.visible:
 					w.visible = false
 					closed_something = true
 			if not closed_something:
-				get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
-		elif event.physical_keycode == KEY_I:
-			_toggle_window(inventory_panel, _refresh_inventory_ui)
-		elif event.physical_keycode == KEY_C:
-			_toggle_window(character_panel, _refresh_character_ui)
-		elif event.physical_keycode == KEY_H:
-			_toggle_window(abilities_panel, Callable())
-		elif event.physical_keycode == KEY_R:
-			_toggle_window(recipes_panel, _refresh_recipes_ui)
-		elif event.physical_keycode == KEY_Q:
-			_toggle_window(quests_panel, _refresh_quests_ui)
-		elif event.physical_keycode == KEY_T:
-			_toggle_window(skill_tree_panel, _refresh_skill_tree_ui)
-		elif event.physical_keycode == KEY_E:
-			if near_crafting_station:
-				_toggle_window(crafting_panel, _refresh_crafting_ui)
-		elif event.physical_keycode >= KEY_1 and event.physical_keycode <= KEY_5:
-			# Atajos 1-5 reservados para un futuro sistema de equipamiento
-			# rápido (p. ej. cambiar de arma o usar un objeto desde una
-			# barra de accesos directos). Preparados y conectados, pero
-			# sin acción todavía: solo llaman a este stub.
-			var quick_index: int = event.physical_keycode - KEY_1
-			_on_quick_equip_shortcut(quick_index)
+				_open_pause_menu()
+		return
+
+	# Con el menú de pausa o los ajustes abiertos, ningún otro atajo
+	# (inventario, misiones...) debe reaccionar por debajo.
+	if pause_menu_panel.visible or settings_panel.visible:
+		return
+
+	if event.physical_keycode == GameSave.get_keybind("inventory"):
+		_toggle_window(inventory_panel, _refresh_inventory_ui)
+	elif event.physical_keycode == GameSave.get_keybind("character"):
+		_toggle_window(character_panel, _refresh_character_ui)
+	elif event.physical_keycode == GameSave.get_keybind("abilities"):
+		_toggle_window(abilities_panel, Callable())
+	elif event.physical_keycode == GameSave.get_keybind("recipes"):
+		_toggle_window(recipes_panel, _refresh_recipes_ui)
+	elif event.physical_keycode == GameSave.get_keybind("quests"):
+		_toggle_window(quests_panel, _refresh_quests_ui)
+	elif event.physical_keycode == GameSave.get_keybind("skills"):
+		_toggle_window(skill_tree_panel, _refresh_skill_tree_ui)
+	elif event.physical_keycode == GameSave.get_keybind("controls"):
+		_toggle_window(controls_panel, _refresh_controls_ui)
+	elif event.physical_keycode == GameSave.get_keybind("craft"):
+		if near_crafting_station:
+			_toggle_window(crafting_panel, _refresh_crafting_ui)
+	elif event.physical_keycode >= KEY_1 and event.physical_keycode <= KEY_5:
+		# Atajos 1-5 reservados para un futuro sistema de equipamiento
+		# rápido (p. ej. cambiar de arma o usar un objeto desde una
+		# barra de accesos directos). Preparados y conectados, pero
+		# sin acción todavía: solo llaman a este stub.
+		var quick_index: int = event.physical_keycode - KEY_1
+		_on_quick_equip_shortcut(quick_index)
 
 
 func _toggle_window(panel: Control, on_open_refresh: Callable) -> void:
@@ -233,11 +295,14 @@ func _build_ui() -> void:
 	dodge_slot.add_child(dodge_cd_label)
 	ability_bar.add_child(dodge_slot)
 
-	# --- Instrucciones, ancladas arriba a la derecha ---
-	var instructions := Label.new()
-	instructions.position = Vector2(vp_size.x - 320.0, 20)
-	instructions.text = "WASD: Moverse\nTab: Seleccionar objetivo\nClic izq / 1: Ataque básico\n2: Golpe de poder\nEspacio: Esquivar\nF: Recoger objeto\nI: Inventario\nQ: Misiones\nT: Árbol de habilidades\nR: Recetario"
-	ui.add_child(instructions)
+	# --- Aviso pequeño de controles, anclado arriba a la derecha. La
+	# lista completa (antes siempre visible y molesta) ahora vive en su
+	# propia ventanita, ver _build_controls_ui(). ---
+	controls_hint_label = Label.new()
+	controls_hint_label.position = Vector2(vp_size.x - 200.0, 20)
+	controls_hint_label.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
+	_refresh_controls_hint()
+	ui.add_child(controls_hint_label)
 
 	# --- Aviso de interacción con la estación de crafteo ---
 	craft_prompt_label = Label.new()
@@ -1174,7 +1239,11 @@ func _build_skill_tree_ui() -> void:
 		branch_nodes[node.branch].append(node)
 
 	var tabs := TabContainer.new()
-	tabs.custom_minimum_size = Vector2(320, 320)
+	# Con 5 columnas por rama el contenido de cada pestaña ya no cabe en
+	# los 320x320 de antes (2 columnas); esto es solo un mínimo de
+	# partida, el tab_area real de cada rama (más abajo) crece según
+	# max_col/max_row y el TabContainer se ajusta a su hijo más grande.
+	tabs.custom_minimum_size = Vector2(540, 340)
 	var tabs_panel_style := StyleBoxFlat.new()
 	tabs_panel_style.bg_color = Color(0.11, 0.09, 0.14, 0.98)
 	tabs_panel_style.border_color = Color(0.039, 0.031, 0.063)
@@ -1335,3 +1404,375 @@ func _on_skill_node_pressed(node: SkillNode) -> void:
 	if player.unlock_skill(node):
 		_refresh_skill_tree_ui()
 		_refresh_character_ui()
+
+
+## --- Ventana pequeña de "Controles" (N) ---
+##
+## Antes era un Label siempre visible arriba a la derecha con todos los
+## atajos; ahora es una ventana más (mismo patrón _make_window que el
+## resto) que se abre y cierra con una tecla, y se reconstruye cada vez
+## que se abre para reflejar las teclas actuales (por si se han
+## reasignado desde Ajustes > Controles).
+
+func _build_controls_ui() -> void:
+	if ui_canvas == null:
+		return
+
+	var win := _make_window("Controles", Vector2(500.0, 20.0))
+	controls_panel = win["panel"]
+	var box: VBoxContainer = win["box"]
+
+	controls_text_label = Label.new()
+	controls_text_label.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+	controls_text_label.add_theme_font_size_override("font_size", 13)
+	box.add_child(controls_text_label)
+
+	_refresh_controls_ui()
+
+
+func _refresh_controls_ui() -> void:
+	if controls_text_label == null:
+		return
+	var lines := [
+		"WASD: Moverse",
+		"Tab: Seleccionar objetivo",
+		"Clic izq / 1: Ataque básico",
+		"2: Golpe de poder",
+		"Espacio: Esquivar",
+		"%s: Recoger objeto" % OS.get_keycode_string(GameSave.get_keybind("pickup")),
+		"%s: Inventario" % OS.get_keycode_string(GameSave.get_keybind("inventory")),
+		"%s: Personaje" % OS.get_keycode_string(GameSave.get_keybind("character")),
+		"%s: Habilidades" % OS.get_keycode_string(GameSave.get_keybind("abilities")),
+		"%s: Misiones" % OS.get_keycode_string(GameSave.get_keybind("quests")),
+		"%s: Árbol de habilidades" % OS.get_keycode_string(GameSave.get_keybind("skills")),
+		"%s: Recetario" % OS.get_keycode_string(GameSave.get_keybind("recipes")),
+		"%s: Craftear (junto a la estación)" % OS.get_keycode_string(GameSave.get_keybind("craft")),
+		"ESC: Menú de pausa",
+	]
+	controls_text_label.text = "\n".join(lines)
+	_refresh_controls_hint()
+
+
+func _refresh_controls_hint() -> void:
+	if controls_hint_label == null:
+		return
+	controls_hint_label.text = "%s: Controles" % OS.get_keycode_string(GameSave.get_keybind("controls"))
+
+
+## --- Menú de pausa (ESC) y Ajustes ---
+##
+## Distinto de las ventanas de _make_window: va en su propia CanvasLayer
+## (por encima de todo lo demás, incluida cualquier ventana flotante
+## abierta) y se centra en pantalla en vez de anclarse a una esquina.
+## No entra en "floating_windows": su apertura/cierre lo gestiona
+## _input() de forma explícita (ver el bloque de KEY_ESCAPE).
+
+func _build_pause_menu_ui() -> void:
+	var canvas := CanvasLayer.new()
+	canvas.layer = 5
+	add_child(canvas)
+
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(root)
+
+	pause_dim = ColorRect.new()
+	pause_dim.color = Color(0, 0, 0, 0.55)
+	pause_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	pause_dim.visible = false
+	root.add_child(pause_dim)
+
+	var menu := _make_centered_panel(root, "Pausa")
+	pause_menu_panel = menu["panel"]
+	var menu_box: VBoxContainer = menu["box"]
+	menu_box.custom_minimum_size = Vector2(240, 0)
+
+	var resume_button := _make_slot_button("Reanudar")
+	resume_button.custom_minimum_size = Vector2(220, 40)
+	resume_button.pressed.connect(_close_pause_menu)
+	menu_box.add_child(resume_button)
+
+	var settings_button := _make_slot_button("Ajustes")
+	settings_button.custom_minimum_size = Vector2(220, 40)
+	settings_button.pressed.connect(_open_settings_from_pause)
+	menu_box.add_child(settings_button)
+
+	var exit_menu_button := _make_slot_button("Salir al Menú")
+	exit_menu_button.custom_minimum_size = Vector2(220, 40)
+	exit_menu_button.pressed.connect(_on_exit_to_menu_pressed)
+	menu_box.add_child(exit_menu_button)
+
+	var quit_button := _make_slot_button("Salir del Juego")
+	quit_button.custom_minimum_size = Vector2(220, 40)
+	quit_button.pressed.connect(_on_quit_game_pressed)
+	menu_box.add_child(quit_button)
+
+	_build_settings_ui(root)
+
+	get_viewport().size_changed.connect(_center_pause_ui)
+	call_deferred("_center_pause_ui")
+
+
+## Crea un panel centrado (sin barra de arrastre ni X, a diferencia de
+## _make_window): quien lo abra/cierre lo hace desde su propio botón
+## ("Reanudar", "Volver"...) o desde ESC en _input().
+func _make_centered_panel(parent: Control, title_text: String) -> Dictionary:
+	var panel := PanelContainer.new()
+	panel.visible = false
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.11, 0.09, 0.14, 0.98)
+	style.border_color = Color(0.039, 0.031, 0.063)
+	style.set_border_width_all(3)
+	style.set_content_margin_all(18)
+	panel.add_theme_stylebox_override("panel", style)
+	parent.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	panel.add_child(box)
+
+	if title_text != "":
+		var title := Label.new()
+		title.text = title_text
+		title.add_theme_color_override("font_color", Color(0.478, 0.125, 0.188))
+		title.add_theme_font_size_override("font_size", 22)
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(title)
+
+	return {"panel": panel, "box": box}
+
+
+func _center_pause_ui() -> void:
+	var vp_size := get_viewport().get_visible_rect().size
+	if pause_menu_panel != null and pause_menu_panel.visible:
+		pause_menu_panel.position = ((vp_size - pause_menu_panel.size) / 2.0).round()
+	if settings_panel != null and settings_panel.visible:
+		settings_panel.position = ((vp_size - settings_panel.size) / 2.0).round()
+
+
+func _open_pause_menu() -> void:
+	pause_dim.visible = true
+	pause_menu_panel.visible = true
+	settings_panel.visible = false
+	player.input_locked = true
+	call_deferred("_center_pause_ui")
+
+
+func _close_pause_menu() -> void:
+	pause_dim.visible = false
+	pause_menu_panel.visible = false
+	settings_panel.visible = false
+	rebinding_action = ""
+	player.input_locked = false
+
+
+func _open_settings_from_pause() -> void:
+	pause_menu_panel.visible = false
+	settings_panel.visible = true
+	_refresh_settings_ui()
+	call_deferred("_center_pause_ui")
+
+
+func _close_settings() -> void:
+	settings_panel.visible = false
+	pause_menu_panel.visible = true
+	rebinding_action = ""
+	call_deferred("_center_pause_ui")
+
+
+func _on_exit_to_menu_pressed() -> void:
+	player.input_locked = false
+	get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
+
+
+func _on_quit_game_pressed() -> void:
+	get_tree().quit()
+
+
+## --- Ajustes: pestaña "General" (pantalla completa, volumen, silencio) ---
+##
+## Misma lógica que ya usaba scripts/main_menu.gd (AudioServer para el
+## volumen del bus "Master", DisplayServer para pantalla completa), para
+## no duplicarla con otro enfoque: solo se añade el silencio (que el
+## menú principal no tenía) y todo queda persistido en GameSave.
+
+func _build_settings_ui(root: Control) -> void:
+	var win := _make_centered_panel(root, "Ajustes")
+	settings_panel = win["panel"]
+	var box: VBoxContainer = win["box"]
+	box.custom_minimum_size = Vector2(340, 0)
+
+	settings_tabs = TabContainer.new()
+	settings_tabs.custom_minimum_size = Vector2(340, 260)
+
+	var tabs_panel_style := StyleBoxFlat.new()
+	tabs_panel_style.bg_color = Color(0.11, 0.09, 0.14, 0.98)
+	tabs_panel_style.border_color = Color(0.039, 0.031, 0.063)
+	tabs_panel_style.set_border_width_all(2)
+	settings_tabs.add_theme_stylebox_override("panel", tabs_panel_style)
+	var tab_selected_style := StyleBoxFlat.new()
+	tab_selected_style.bg_color = Color(0.169, 0.125, 0.220)
+	tab_selected_style.set_content_margin_all(8)
+	settings_tabs.add_theme_stylebox_override("tab_selected", tab_selected_style)
+	var tab_unselected_style := StyleBoxFlat.new()
+	tab_unselected_style.bg_color = Color(0.11, 0.09, 0.14)
+	tab_unselected_style.set_content_margin_all(8)
+	settings_tabs.add_theme_stylebox_override("tab_unselected", tab_unselected_style)
+	settings_tabs.add_theme_color_override("font_selected_color", Color(0.95, 0.65, 0.15))
+	settings_tabs.add_theme_color_override("font_unselected_color", Color(0.6, 0.58, 0.62))
+	box.add_child(settings_tabs)
+
+	_build_settings_general_tab(settings_tabs)
+	_build_settings_controls_tab(settings_tabs)
+
+	var back_button := _make_slot_button("Volver")
+	back_button.custom_minimum_size = Vector2(220, 40)
+	back_button.pressed.connect(_close_settings)
+	box.add_child(back_button)
+
+
+func _build_settings_general_tab(tabs: TabContainer) -> void:
+	var tab := VBoxContainer.new()
+	tab.name = "General"
+	tab.add_theme_constant_override("separation", 14)
+	tabs.add_child(tab)
+
+	fullscreen_check = CheckButton.new()
+	fullscreen_check.text = "Pantalla completa"
+	fullscreen_check.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+	fullscreen_check.toggled.connect(_on_fullscreen_toggled)
+	tab.add_child(fullscreen_check)
+
+	var volume_label := Label.new()
+	volume_label.text = "Volumen general"
+	volume_label.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+	tab.add_child(volume_label)
+
+	var volume_row := HBoxContainer.new()
+	volume_row.add_theme_constant_override("separation", 10)
+	tab.add_child(volume_row)
+
+	volume_slider = HSlider.new()
+	volume_slider.min_value = 0.0
+	volume_slider.max_value = 1.0
+	volume_slider.step = 0.01
+	volume_slider.custom_minimum_size = Vector2(190, 0)
+	volume_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	volume_slider.value_changed.connect(_on_volume_changed)
+	volume_row.add_child(volume_slider)
+
+	# Casilla al lado del control de volumen para silenciar/activar sin
+	# perder el valor del slider (independiente de él, como se pidió).
+	mute_check = CheckButton.new()
+	mute_check.text = "Silenciar"
+	mute_check.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+	mute_check.toggled.connect(_on_mute_toggled)
+	volume_row.add_child(mute_check)
+
+
+func _on_fullscreen_toggled(pressed: bool) -> void:
+	if pressed:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	GameSave.set_fullscreen(pressed)
+
+
+func _on_volume_changed(value: float) -> void:
+	AudioServer.set_bus_volume_db(master_bus_index, linear_to_db(value))
+	GameSave.set_master_volume(value)
+
+
+func _on_mute_toggled(pressed: bool) -> void:
+	AudioServer.set_bus_mute(master_bus_index, pressed)
+	GameSave.set_master_muted(pressed)
+
+
+func _apply_saved_display_and_audio_settings() -> void:
+	master_bus_index = AudioServer.get_bus_index("Master")
+	AudioServer.set_bus_volume_db(master_bus_index, linear_to_db(GameSave.get_master_volume()))
+	AudioServer.set_bus_mute(master_bus_index, GameSave.get_master_muted())
+	if GameSave.get_fullscreen():
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+
+func _refresh_settings_ui() -> void:
+	if fullscreen_check != null:
+		fullscreen_check.button_pressed = DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+	if volume_slider != null:
+		volume_slider.value = GameSave.get_master_volume()
+	if mute_check != null:
+		mute_check.button_pressed = GameSave.get_master_muted()
+	for action in rebind_buttons.keys():
+		var button: Button = rebind_buttons[action]
+		button.text = OS.get_keycode_string(GameSave.get_keybind(action))
+
+
+## --- Ajustes: pestaña "Controles" (reasignar teclas) ---
+##
+## Por ahora solo las teclas que abren ventanas (ver GameSave.
+## DEFAULT_KEYBINDS): clic en la tecla actual, se pone en modo "esperando
+## tecla" (rebinding_action) y la siguiente tecla que se pulse en
+## _input() la reemplaza.
+
+func _build_settings_controls_tab(tabs: TabContainer) -> void:
+	var tab := VBoxContainer.new()
+	tab.name = "Controles"
+	tab.add_theme_constant_override("separation", 8)
+	tabs.add_child(tab)
+
+	var hint := Label.new()
+	hint.text = "Clic en una tecla y pulsa la nueva para cambiarla. ESC cancela."
+	hint.add_theme_font_size_override("font_size", 11)
+	hint.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD
+	hint.custom_minimum_size = Vector2(300, 0)
+	tab.add_child(hint)
+
+	rebind_buttons.clear()
+	for action in KEYBIND_ORDER:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		tab.add_child(row)
+
+		var label := Label.new()
+		label.text = KEYBIND_LABELS.get(action, action)
+		label.custom_minimum_size = Vector2(190, 0)
+		label.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+		row.add_child(label)
+
+		var key_button := _make_slot_button(OS.get_keycode_string(GameSave.get_keybind(action)))
+		key_button.custom_minimum_size = Vector2(110, 32)
+		key_button.pressed.connect(_on_rebind_button_pressed.bind(action))
+		row.add_child(key_button)
+		rebind_buttons[action] = key_button
+
+
+func _on_rebind_button_pressed(action: String) -> void:
+	rebinding_action = action
+	var button: Button = rebind_buttons.get(action)
+	if button != null:
+		button.text = "Pulsa una tecla..."
+
+
+func _finish_rebind(keycode: int) -> void:
+	var action := rebinding_action
+	rebinding_action = ""
+	if action == "":
+		return
+	GameSave.set_keybind(action, keycode)
+	var button: Button = rebind_buttons.get(action)
+	if button != null:
+		button.text = OS.get_keycode_string(keycode)
+	_refresh_controls_hint()
+
+
+func _cancel_rebind() -> void:
+	var action := rebinding_action
+	rebinding_action = ""
+	var button: Button = rebind_buttons.get(action)
+	if button != null:
+		button.text = OS.get_keycode_string(GameSave.get_keybind(action))

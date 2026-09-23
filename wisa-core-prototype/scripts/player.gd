@@ -54,6 +54,12 @@ var completed_quests: Array[Quest] = []
 ## Objeto del suelo más cercano dentro de "pickup_range" (o null).
 var nearby_world_item: WorldItem = null
 
+## Cuando es true, se ignora todo el movimiento/combate del jugador.
+## Lo activa main.gd mientras el menú de pausa (ESC) o los ajustes
+## están abiertos, para que el personaje no se mueva ni ataque "detrás"
+## del menú mientras se está navegando por él.
+var input_locked: bool = false
+
 ## Árbol de habilidades (BASE, ver skill_tree_database.gd). Puntos de
 ## partida provisionales para poder probar la ventana ya mismo; cuando
 ## se defina de dónde vienen de verdad (subir de nivel, misiones...)
@@ -741,7 +747,7 @@ func _update_head_sprite() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if is_dead:
+	if is_dead or input_locked:
 		velocity = Vector2.ZERO
 		move_and_slide()
 		return
@@ -752,10 +758,13 @@ func _physics_process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if is_dead:
+	if is_dead or input_locked:
 		return
 
 	if event is InputEventKey and event.pressed and not event.echo:
+		if event.physical_keycode == GameSave.get_keybind("pickup"):
+			_try_pickup()
+			return
 		match event.physical_keycode:
 			KEY_TAB:
 				_cycle_target()
@@ -765,8 +774,6 @@ func _input(event: InputEvent) -> void:
 				_power_strike()
 			KEY_SPACE:
 				_dodge()
-			KEY_F:
-				_try_pickup()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		_basic_attack()
 
