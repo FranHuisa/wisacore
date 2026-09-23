@@ -80,6 +80,13 @@ var master_bus_index: int = 0
 var rebind_buttons: Dictionary = {}
 var rebinding_action: String = ""
 
+## --- Música (provisional) ---
+## En el bus "Master" a propósito: así el slider/casilla de silencio de
+## Ajustes > General (que ya controla ese bus) sirve para probarla sin
+## tener que montar un bus de música aparte todavía.
+const MUSIC_TRACK_PATH := "res://media/main_soundtrack.mp3"
+var music_player: AudioStreamPlayer
+
 const KEYBIND_LABELS := {
 	"inventory": "Inventario",
 	"character": "Personaje",
@@ -119,6 +126,7 @@ func _ready() -> void:
 	_build_skill_tree_ui()
 	_build_controls_ui()
 	_build_pause_menu_ui()
+	_build_music()
 
 	crafting_station.player_entered_range.connect(_on_crafting_range_entered)
 	crafting_station.player_exited_range.connect(_on_crafting_range_exited)
@@ -331,6 +339,25 @@ func _build_ui() -> void:
 	world_drop_zone.mouse_filter = Control.MOUSE_FILTER_PASS
 	world_drop_zone.on_item_dropped = _on_backpack_item_dropped_to_world
 	ui.add_child(world_drop_zone)
+
+
+## --- Música (provisional) ---
+##
+## El .mp3 no viene marcado como "loop" desde el importador de Godot
+## (habría que tocar main_soundtrack.mp3.import), así que el bucle se
+## hace por código: al terminar, vuelve a sonar desde el principio.
+func _build_music() -> void:
+	if not ResourceLoader.exists(MUSIC_TRACK_PATH):
+		return
+	var stream: AudioStream = load(MUSIC_TRACK_PATH)
+	if stream == null:
+		return
+	music_player = AudioStreamPlayer.new()
+	music_player.stream = stream
+	music_player.bus = "Master"
+	add_child(music_player)
+	music_player.finished.connect(func(): music_player.play())
+	music_player.play()
 
 
 func _make_ability_slot(label_text: String) -> Panel:
