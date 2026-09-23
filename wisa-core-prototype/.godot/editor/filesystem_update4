@@ -1,3 +1,5 @@
 res://scripts/main.gd
 res://scripts/player.gd
 res://scripts/skill_tree_database.gd
+res://scripts/game_save.gd
+res://scripts/main_menu.gd
