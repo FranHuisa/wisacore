@@ -52,10 +52,17 @@ var gold_label: Label
 var world_drop_zone: WorldDropZone
 var drop_quantity_popup: PopupPanel
 
+## Ventana "Árboles" (T): un panel con selector para 3 árboles -
+## Recetas / Efectos / Habilidades -, ver _build_skill_tree_ui() y
+## _build_tree_view(). "skill_points_label" es compartido por los 3
+## (gastan del mismo Player.skill_points); cada árbol guarda su propia
+## entrada (nodos, botones, líneas, sus funciones is_unlocked/
+## can_unlock) en tree_entries para poder refrescarlo sin repetir la
+## lógica en main.gd tres veces.
 var skill_tree_panel: Control
 var skill_points_label: Label
-var skill_node_buttons: Dictionary = {}
-var skill_tree_lines: Array = []
+var tree_entries: Dictionary = {}
+var tree_view_buttons: Dictionary = {}
 
 const SKILL_CELL_SIZE := Vector2(90, 90)
 const SKILL_NODE_SIZE := Vector2(56, 56)
@@ -92,7 +99,7 @@ const KEYBIND_LABELS := {
 	"character": "Personaje",
 	"abilities": "Habilidades",
 	"quests": "Misiones",
-	"skills": "Árbol de habilidades",
+	"skills": "Árboles (Recetas/Efectos/Habilidades)",
 	"recipes": "Recetario",
 	"craft": "Interactuar / Craftear",
 	"pickup": "Recoger objeto",
@@ -114,7 +121,9 @@ func _ready() -> void:
 	player.gold_changed.connect(_on_gold_changed)
 	player.quests_changed.connect(_refresh_quests_ui)
 	player.pickup_target_changed.connect(_on_pickup_target_changed)
-	player.skill_tree_changed.connect(_refresh_skill_tree_ui)
+	player.skill_tree_changed.connect(_refresh_effects_tree_ui)
+	player.weapon_tree_changed.connect(_refresh_weapon_tree_ui)
+	player.recipe_tree_changed.connect(_refresh_recipe_tree_ui)
 	_on_player_health_changed(player.current_health, player.max_health)
 	_on_player_stamina_changed(player.current_stamina, player.max_stamina)
 	_build_inventory_ui()
@@ -179,7 +188,7 @@ func _input(event: InputEvent) -> void:
 	elif event.physical_keycode == GameSave.get_keybind("quests"):
 		_toggle_window(quests_panel, _refresh_quests_ui)
 	elif event.physical_keycode == GameSave.get_keybind("skills"):
-		_toggle_window(skill_tree_panel, _refresh_skill_tree_ui)
+		_toggle_window(skill_tree_panel, _refresh_all_trees)
 	elif event.physical_keycode == GameSave.get_keybind("controls"):
 		_toggle_window(controls_panel, _refresh_controls_ui)
 	elif event.physical_keycode == GameSave.get_keybind("craft"):
@@ -1220,26 +1229,60 @@ func _on_claim_quest_pressed(quest: Quest) -> void:
 		_refresh_inventory_ui()
 
 
-## --- Ventana de Árbol de Habilidades (T) ---
+## --- Ventana de Árboles (T): Recetas / Efectos / Habilidades ---
 ##
-## BASE de partida: una pestaña por rama (SkillNode.branch), y dentro
-## de cada pestaña los nodos se dibujan de ABAJO hacia ARRIBA (el nivel
-## 0 de grid_position.y queda pegado al fondo del área, y sube según
-## crece grid_position.y). Con 5 columnas por nivel y cada nodo
-## exigiendo sus dos VECINOS diagonales del nivel de abajo (columna - 1
-## y columna + 1, ver skill_tree_database.gd), las líneas de conexión
-## se cruzan formando una X entre cada dos columnas vecinas, repetida
-## a lo largo de toda la fila. El contenido real (ramas, nombres,
-## columnas, niveles, bonus, costes) se ajusta por completo en
-## scripts/skill_tree_database.gd sin tocar nada de esta ventana.
+## La tecla T abre un panel con un selector: 3 botones arriba (Recetas,
+## Efectos, Habilidades) que muestran/ocultan 3 "vistas" (una por
+## árbol). Cada vista es su propio TabContainer con una pestaña por
+## rama (SkillNode.branch), construida una sola vez por
+## _build_tree_view() para no repetir la lógica 3 veces. Los 3 árboles
+## gastan del mismo Player.skill_points (ver player.gd).
+##
+## - Efectos (skill_tree_database.gd): rejilla 5x5 por rama, conexión en
+##   X por vecinos (columna -1/+1 de la fila de abajo).
+## - Habilidades (weapon_skill_tree_database.gd): una rama por clase +
+##   Escudo; cada una tiene un nodo raíz "Nivel 1" que se abre en un
+##   carril por arma, subiendo en línea recta hasta el nivel 5.
+## - Recetas (recipe_tree_database.gd): misma rejilla que Efectos, una
+##   rama por tipo de crafteo (Cocina / Ingeniería / Artesanía Arcana /
+##   Artesanía). Todavía no desbloquea recetas reales del crafteo, es
+##   solo la progresión visual de esta BASE.
+##
+## Tanto la forma de cada árbol (SkillTreeGenerators) como el contenido
+## (los 3 *_database.gd) se pueden cambiar sin tocar nada de esta
+## ventana.
 
 func _build_skill_tree_ui() -> void:
 	if ui_canvas == null:
 		return
 
-	var win := _make_window("Árbol de Habilidades", Vector2(420.0, 420.0))
+	var win := _make_window("Árboles", Vector2(360.0, 40.0))
 	skill_tree_panel = win["panel"]
 	var box: VBoxContainer = win["box"]
+
+	# --- Selector: qué árbol se está viendo. Va justo debajo del
+	# título de la ventana ("Árboles"), antes que nada más, y
+	# centrado. ---
+	var selector := HBoxContainer.new()
+	selector.add_theme_constant_override("separation", 6)
+	selector.alignment = BoxContainer.ALIGNMENT_CENTER
+	selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(selector)
+
+	var recipes_button := _make_slot_button("Recetas")
+	recipes_button.pressed.connect(_show_tree_view.bind("recipes"))
+	selector.add_child(recipes_button)
+	tree_view_buttons["recipes"] = recipes_button
+
+	var effects_button := _make_slot_button("Efectos")
+	effects_button.pressed.connect(_show_tree_view.bind("effects"))
+	selector.add_child(effects_button)
+	tree_view_buttons["effects"] = effects_button
+
+	var weapons_button := _make_slot_button("Habilidades")
+	weapons_button.pressed.connect(_show_tree_view.bind("weapons"))
+	selector.add_child(weapons_button)
+	tree_view_buttons["weapons"] = weapons_button
 
 	skill_points_label = Label.new()
 	skill_points_label.text = "Puntos disponibles: 0"
@@ -1255,24 +1298,43 @@ func _build_skill_tree_ui() -> void:
 	hint.custom_minimum_size = Vector2(280, 0)
 	box.add_child(hint)
 
-	# --- Agrupar los nodos por rama, conservando el orden en que
-	# aparecen en SkillTreeDatabase (así las pestañas salen en ese
-	# mismo orden: Guerrero, Pícaro, Clérigo, Mago, Ingeniero,
-	# Elaboración, Ingeniería, Competencias...). ---
-	var branch_order: Array = []
-	var branch_nodes: Dictionary = {}
-	for node in player.skill_tree_nodes:
-		if not branch_nodes.has(node.branch):
-			branch_nodes[node.branch] = []
-			branch_order.append(node.branch)
-		branch_nodes[node.branch].append(node)
+	# --- Las 3 vistas, construidas con el mismo generador genérico
+	# (_build_tree_view) y guardadas en tree_entries para refrescarlas
+	# sin repetir la lógica de pintado en cada una. ---
+	tree_entries["recipes"] = _build_tree_view(player.recipe_tree_nodes, player.is_recipe_node_unlocked, player.can_unlock_recipe_node, _on_recipe_node_pressed)
+	tree_entries["effects"] = _build_tree_view(player.skill_tree_nodes, player.is_skill_unlocked, player.can_unlock_skill, _on_effects_node_pressed)
+	tree_entries["weapons"] = _build_tree_view(player.weapon_tree_nodes, player.is_weapon_unlocked, player.can_unlock_weapon, _on_weapon_node_pressed)
+	for key in ["recipes", "effects", "weapons"]:
+		box.add_child(tree_entries[key]["view"])
+
+	_show_tree_view("effects")
+	_refresh_all_trees()
+
+
+## Muestra la vista del árbol "which" ("recipes"/"effects"/"weapons") y
+## oculta las otras 2. Un TabContainer con visible=false no cuenta para
+## el tamaño del VBoxContainer que lo contiene, así que la ventana se
+## reajusta sola al tamaño del árbol que se está viendo.
+func _show_tree_view(which: String) -> void:
+	for key in tree_entries.keys():
+		tree_entries[key]["view"].visible = (key == which)
+	for key in tree_view_buttons.keys():
+		var button: Button = tree_view_buttons[key]
+		button.disabled = (key == which)
+
+
+## Construye una vista de árbol genérica: agrupa "nodes" por rama
+## (SkillNode.branch) en pestañas, dibuja las líneas de prerrequisito y
+## los botones de cada nodo, y los conecta a "on_press_fn" (que ya sabe
+## a qué árbol pertenecen esos nodos). "is_unlocked_fn"/"can_unlock_fn"
+## son las funciones del Player que consultan el diccionario
+## "unlocked_*_ids" correcto para ESTE árbol -- así _refresh_tree_view()
+## puede pintar cualquiera de los 3 sin saber cuál es.
+func _build_tree_view(nodes: Array, is_unlocked_fn: Callable, can_unlock_fn: Callable, on_press_fn: Callable) -> Dictionary:
+	var view := VBoxContainer.new()
+	view.visible = false
 
 	var tabs := TabContainer.new()
-	# Con 5 columnas x 5 niveles por rama el contenido de cada pestaña ya
-	# no cabe en los 320x320 de antes (2 columnas x 3 niveles); esto es
-	# solo un mínimo de partida, el tab_area real de cada rama (más
-	# abajo) crece según max_col/max_row y el TabContainer se ajusta a
-	# su hijo más grande.
 	tabs.custom_minimum_size = Vector2(540, 540)
 	var tabs_panel_style := StyleBoxFlat.new()
 	tabs_panel_style.bg_color = Color(0.11, 0.09, 0.14, 0.98)
@@ -1289,14 +1351,25 @@ func _build_skill_tree_ui() -> void:
 	tabs.add_theme_stylebox_override("tab_unselected", tab_unselected_style)
 	tabs.add_theme_color_override("font_selected_color", Color(0.95, 0.65, 0.15))
 	tabs.add_theme_color_override("font_unselected_color", Color(0.6, 0.58, 0.62))
-	box.add_child(tabs)
+	# Las pestañas de rama (Guerrero, Pícaro, Cocina...) centradas, no
+	# pegadas a la izquierda.
+	tabs.tab_alignment = TabBar.ALIGNMENT_CENTER
+	view.add_child(tabs)
 
-	# Líneas primero (por rama), luego los nodos encima, igual que antes.
-	skill_tree_lines.clear()
-	skill_node_buttons.clear()
+	var branch_order: Array = []
+	var branch_nodes: Dictionary = {}
+	for node in nodes:
+		if not branch_nodes.has(node.branch):
+			branch_nodes[node.branch] = []
+			branch_order.append(node.branch)
+		branch_nodes[node.branch].append(node)
+
 	var by_id: Dictionary = {}
-	for node in player.skill_tree_nodes:
+	for node in nodes:
 		by_id[node.skill_id] = node
+
+	var buttons: Dictionary = {}
+	var lines: Array = []
 
 	for branch in branch_order:
 		var nodes_in_branch: Array = branch_nodes[branch]
@@ -1308,7 +1381,7 @@ func _build_skill_tree_ui() -> void:
 			max_row = max(max_row, node.grid_position.y)
 
 		var tab_area := Control.new()
-		tab_area.name = branch if branch != "" else "Habilidades"
+		tab_area.name = branch if branch != "" else "General"
 		tab_area.custom_minimum_size = SKILL_TREE_ORIGIN * 2.0 + Vector2(max_col + 1, max_row + 1) * SKILL_CELL_SIZE
 		tabs.add_child(tab_area)
 
@@ -1325,18 +1398,25 @@ func _build_skill_tree_ui() -> void:
 					_skill_node_center(node, max_row),
 				])
 				tab_area.add_child(line)
-				skill_tree_lines.append({"line": line, "from": parent_node, "to": node})
+				lines.append({"line": line, "from": parent_node, "to": node})
 
 		for node in nodes_in_branch:
 			var button := _make_skill_node_button(node)
 			button.position = _skill_node_top_left(node, max_row)
 			button.custom_minimum_size = SKILL_NODE_SIZE
 			button.size = SKILL_NODE_SIZE
-			button.pressed.connect(_on_skill_node_pressed.bind(node))
+			button.pressed.connect(on_press_fn.bind(node))
 			tab_area.add_child(button)
-			skill_node_buttons[node.skill_id] = button
+			buttons[node.skill_id] = button
 
-	_refresh_skill_tree_ui()
+	return {
+		"view": view,
+		"nodes": nodes,
+		"buttons": buttons,
+		"lines": lines,
+		"is_unlocked_fn": is_unlocked_fn,
+		"can_unlock_fn": can_unlock_fn,
+	}
 
 
 ## "max_row" es el nivel más alto de ESA rama: al nivel 0 (grid_position.y
@@ -1373,18 +1453,57 @@ func _make_skill_node_button(node: SkillNode) -> Button:
 	return button
 
 
-func _refresh_skill_tree_ui() -> void:
-	if skill_points_label == null:
-		return
-	skill_points_label.text = "Puntos disponibles: %d" % player.skill_points
+## Refresca los 3 árboles a la vez (se usa al abrir la ventana con T,
+## ver _toggle_window en _input()). Los refrescos puntuales tras
+## desbloquear un nodo van por las señales de player.gd
+## (skill_tree_changed/weapon_tree_changed/recipe_tree_changed), ver
+## _refresh_effects_tree_ui/_refresh_weapon_tree_ui/_refresh_recipe_tree_ui.
+func _refresh_all_trees() -> void:
+	_update_skill_points_label()
+	for key in tree_entries.keys():
+		_refresh_tree_view(tree_entries[key])
 
-	for node in player.skill_tree_nodes:
-		var button: Button = skill_node_buttons.get(node.skill_id)
+
+func _refresh_effects_tree_ui() -> void:
+	if not tree_entries.has("effects"):
+		return
+	_update_skill_points_label()
+	_refresh_tree_view(tree_entries["effects"])
+
+
+func _refresh_weapon_tree_ui() -> void:
+	if not tree_entries.has("weapons"):
+		return
+	_update_skill_points_label()
+	_refresh_tree_view(tree_entries["weapons"])
+
+
+func _refresh_recipe_tree_ui() -> void:
+	if not tree_entries.has("recipes"):
+		return
+	_update_skill_points_label()
+	_refresh_tree_view(tree_entries["recipes"])
+
+
+func _update_skill_points_label() -> void:
+	if skill_points_label != null:
+		skill_points_label.text = "Puntos disponibles: %d" % player.skill_points
+
+
+func _refresh_tree_view(entry: Dictionary) -> void:
+	var nodes: Array = entry["nodes"]
+	var buttons: Dictionary = entry["buttons"]
+	var lines: Array = entry["lines"]
+	var is_unlocked_fn: Callable = entry["is_unlocked_fn"]
+	var can_unlock_fn: Callable = entry["can_unlock_fn"]
+
+	for node in nodes:
+		var button: Button = buttons.get(node.skill_id)
 		if button == null:
 			continue
 
-		var unlocked: bool = player.is_skill_unlocked(node)
-		var can_unlock: bool = player.can_unlock_skill(node)
+		var unlocked: bool = is_unlocked_fn.call(node)
+		var can_unlock: bool = can_unlock_fn.call(node)
 
 		var bg_color: Color
 		if unlocked:
@@ -1418,22 +1537,30 @@ func _refresh_skill_tree_ui() -> void:
 			node.skill_name, node.branch, node.cost, node.description, status_text
 		]
 
-	for entry in skill_tree_lines:
-		var from_node: SkillNode = entry["from"]
-		var to_node: SkillNode = entry["to"]
-		var line: Line2D = entry["line"]
-		if player.is_skill_unlocked(from_node) and player.is_skill_unlocked(to_node):
+	for entry_line in lines:
+		var from_node: SkillNode = entry_line["from"]
+		var to_node: SkillNode = entry_line["to"]
+		var line: Line2D = entry_line["line"]
+		if is_unlocked_fn.call(from_node) and is_unlocked_fn.call(to_node):
 			line.default_color = Color(0.45, 0.80, 0.50)
-		elif player.is_skill_unlocked(from_node):
+		elif is_unlocked_fn.call(from_node):
 			line.default_color = Color(0.75, 0.65, 0.35)
 		else:
 			line.default_color = Color(0.35, 0.3, 0.4)
 
 
-func _on_skill_node_pressed(node: SkillNode) -> void:
+func _on_effects_node_pressed(node: SkillNode) -> void:
 	if player.unlock_skill(node):
-		_refresh_skill_tree_ui()
 		_refresh_character_ui()
+
+
+func _on_weapon_node_pressed(node: SkillNode) -> void:
+	if player.unlock_weapon(node):
+		_refresh_character_ui()
+
+
+func _on_recipe_node_pressed(node: SkillNode) -> void:
+	player.unlock_recipe_node(node)
 
 
 ## --- Ventana pequeña de "Controles" (N) ---
@@ -1474,7 +1601,7 @@ func _refresh_controls_ui() -> void:
 		"%s: Personaje" % OS.get_keycode_string(GameSave.get_keybind("character")),
 		"%s: Habilidades" % OS.get_keycode_string(GameSave.get_keybind("abilities")),
 		"%s: Misiones" % OS.get_keycode_string(GameSave.get_keybind("quests")),
-		"%s: Árbol de habilidades" % OS.get_keycode_string(GameSave.get_keybind("skills")),
+		"%s: Árboles (Recetas / Efectos / Habilidades)" % OS.get_keycode_string(GameSave.get_keybind("skills")),
 		"%s: Recetario" % OS.get_keycode_string(GameSave.get_keybind("recipes")),
 		"%s: Craftear (junto a la estación)" % OS.get_keycode_string(GameSave.get_keybind("craft")),
 		"ESC: Menú de pausa",

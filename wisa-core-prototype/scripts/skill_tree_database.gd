@@ -2,34 +2,22 @@ extends Resource
 class_name SkillTreeDatabase
 
 ## =========================================================
-## WisaCore - Árbol de habilidades: contenido de ejemplo (BASE)
+## WisaCore - Árbol de "Efectos" (BASE): una de las 3 pestañas que
+## gestiona la ventana de Árboles (tecla T, ver main.gd), junto con el
+## árbol de Habilidades (weapon_skill_tree_database.gd) y el de Recetas
+## (recipe_tree_database.gd). Este es el árbol de atributos/stats: 8
+## ramas (pestañas), 5 columnas x 5 niveles cada una, generadas con
+## SkillTreeGenerators.make_grid_branch() (rejilla con conexión en X
+## por vecinos - ver ese script para el detalle de la forma).
 ##
-## 8 ramas (una pestaña cada una): Guerrero, Pícaro, Clérigo, Mago,
-## Ingeniero, Elaboración, Ingeniería y Competencias. Cada una tiene 5
-## columnas (0 a 4) por 5 niveles (0 = abajo del todo, sube hacia
-## arriba).
-##
-## Con 8 ramas x 5 columnas x 5 niveles (200 nodos) escribir cada nodo
-## a mano ya no es práctico, así que esta BASE los genera por código
-## con _make_branch(): nombres y bonus genéricos ("Guerrero 3.2" = rama
-## Guerrero, nivel 3, columna 2), listos para que se rebauticen uno a
-## uno más adelante sin tocar el resto del sistema (ni main.gd ni
-## Player). Lo único que hay que cambiar aquí para ajustar el
-## contenido real es la lista BRANCHES de más abajo.
-##
-## Conexión en X por VECINOS (igual que antes, ahora con 5 niveles):
-## cada nodo requiere sus dos vecinos diagonales de la fila de abajo
-## (columna - 1 y columna + 1, los que existan) -> el "2" de una fila
-## conecta con el "1" y el "3" de la fila de arriba, y viceversa.
-##
-##   Fila 2:   1     2     3     4     5
-##              \   / \   / \   / \   /
-##   Fila 1:   1     2     3     4     5
-##
-## Las columnas de los extremos (1 y 5) solo tienen un vecino, así que
-## solo piden esa única columna; las del medio piden las DOS columnas
-## vecinas de abajo (AND). Se repite igual entre cada dos niveles según
-## se sube.
+## Con 8 ramas x 25 nodos (200 en total) escribir cada nodo a mano ya
+## no es práctico: aquí solo se define QUÉ rama hay y qué atributo de
+## StatBlock sube cada una (mismas claves que ItemData.stat_bonuses:
+## estabilidad, agilidad, destreza, punteria, fuerza, voluntad,
+## canalizacion, conexion_elemental, vida_base, aguante_base,
+## mana_base); nombres y bonus genéricos ("Guerrero 3.2" = rama
+## Guerrero, nivel 3, columna 2), listos para rebautizarse uno a uno
+## más adelante sin tocar el resto del sistema.
 ##
 ## Igual que RecipeDatabase/QuestDatabase: crea instancias NUEVAS cada
 ## vez que se llama, así que player.gd la llama una sola vez en
@@ -39,11 +27,6 @@ class_name SkillTreeDatabase
 const COLUMNS := 5
 const TIERS := 5
 
-## Una entrada por rama/pestaña: clave interna (para los IDs de nodo),
-## nombre visible, color y qué atributo de StatBlock sube (mismas
-## claves que ItemData.stat_bonuses: estabilidad, agilidad, destreza,
-## punteria, fuerza, voluntad, canalizacion, conexion_elemental,
-## vida_base, aguante_base, mana_base).
 const BRANCHES := [
 	{"key": "guerrero", "name": "Guerrero", "color": Color(0.70, 0.20, 0.25), "stat": "fuerza"},
 	{"key": "picaro", "name": "Pícaro", "color": Color(0.35, 0.70, 0.45), "stat": "agilidad"},
@@ -59,42 +42,5 @@ const BRANCHES := [
 static func get_all_nodes() -> Array[SkillNode]:
 	var list: Array[SkillNode] = []
 	for branch in BRANCHES:
-		list.append_array(_make_branch(branch["key"], branch["name"], branch["color"], branch["stat"]))
+		list.append_array(SkillTreeGenerators.make_grid_branch(branch["key"], branch["name"], branch["color"], branch["stat"], COLUMNS, TIERS))
 	return list
-
-
-static func _make_branch(key: String, branch_name: String, color: Color, stat_key: String) -> Array[SkillNode]:
-	var nodes: Array[SkillNode] = []
-	for tier in range(TIERS):
-		for col in range(COLUMNS):
-			var id := "%s_%d_%d" % [key, tier, col]
-
-			# Vecinos diagonales de la fila de abajo (los que existan).
-			var requires: Array[String] = []
-			if tier > 0:
-				if col - 1 >= 0:
-					requires.append("%s_%d_%d" % [key, tier - 1, col - 1])
-				if col + 1 < COLUMNS:
-					requires.append("%s_%d_%d" % [key, tier - 1, col + 1])
-
-			var cost := 1 + int(tier / 2.0)
-			var bonus_value := 2.0 + float(tier) * 1.5
-			var node_name := "%s %d.%d" % [branch_name, tier + 1, col + 1]
-			var desc := "Mejora de la rama %s (nivel %d, columna %d)." % [branch_name, tier + 1, col + 1]
-
-			nodes.append(_make_node(id, node_name, desc, branch_name, color, cost, requires, Vector2i(col, tier), {stat_key: bonus_value}))
-	return nodes
-
-
-static func _make_node(id: String, name: String, desc: String, branch: String, color: Color, cost: int, requires: Array[String], grid_pos: Vector2i, bonuses: Dictionary) -> SkillNode:
-	var node := SkillNode.new()
-	node.skill_id = id
-	node.skill_name = name
-	node.description = desc
-	node.branch = branch
-	node.color = color
-	node.cost = cost
-	node.requires = requires
-	node.grid_position = grid_pos
-	node.stat_bonuses = bonuses
-	return node

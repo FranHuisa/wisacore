@@ -60,14 +60,30 @@ var nearby_world_item: WorldItem = null
 ## del menú mientras se está navegando por él.
 var input_locked: bool = false
 
-## Árbol de habilidades (BASE, ver skill_tree_database.gd). Puntos de
-## partida provisionales para poder probar la ventana ya mismo; cuando
-## se defina de dónde vienen de verdad (subir de nivel, misiones...)
-## solo hay que cambiar cómo se incrementa "skill_points", el resto
-## del sistema no se toca.
+## Los 3 árboles que gestiona la ventana "T" (ver main.gd, que ahora es
+## un panel con selector: Recetas / Efectos / Habilidades). Los tres
+## gastan del MISMO "skill_points" (BASE de partida provisional para
+## poder probar ya mismo; cuando se defina de dónde vienen de verdad -
+## subir de nivel, misiones...- solo hay que cambiar cómo se incrementa
+## "skill_points", el resto no se toca):
+##   - skill_tree_nodes / unlocked_skill_ids: árbol de "Efectos"
+##     (atributos: Guerrero, Pícaro, Clérigo, Mago, Ingeniero,
+##     Elaboración, Ingeniería, Competencias). Ver skill_tree_database.gd.
+##   - weapon_tree_nodes / unlocked_weapon_ids: árbol de "Habilidades"
+##     (progresión de armas por clase + Escudo). Ver
+##     weapon_skill_tree_database.gd.
+##   - recipe_tree_nodes / unlocked_recipe_ids: árbol de "Recetas"
+##     (Cocina, Ingeniería, Artesanía Arcana, Artesanía). Todavía no
+##     desbloquea recetas reales del crafteo, es solo la progresión
+##     visual (ver recipe_tree_database.gd). Conectarlo con
+##     known_recipes/RecipeDatabase es el siguiente paso sobre esta base.
 var skill_points: int = 3
 var skill_tree_nodes: Array[SkillNode] = []
 var unlocked_skill_ids: Dictionary = {}
+var weapon_tree_nodes: Array[SkillNode] = []
+var unlocked_weapon_ids: Dictionary = {}
+var recipe_tree_nodes: Array[SkillNode] = []
+var unlocked_recipe_ids: Dictionary = {}
 
 var current_health: float
 var current_stamina: float
@@ -94,6 +110,8 @@ signal quests_changed
 ## item_label vacío = ya no hay ningún objeto del suelo al alcance.
 signal pickup_target_changed(item_label: String)
 signal skill_tree_changed
+signal weapon_tree_changed
+signal recipe_tree_changed
 
 @onready var attack_area: Area2D = $AttackArea
 @onready var sprite: Polygon2D = $Sprite
@@ -123,6 +141,8 @@ func _ready() -> void:
 	known_recipes = RecipeDatabase.get_all_recipes()
 	active_quests = QuestDatabase.get_starting_quests()
 	skill_tree_nodes = SkillTreeDatabase.get_all_nodes()
+	weapon_tree_nodes = WeaponSkillTreeDatabase.get_all_nodes()
+	recipe_tree_nodes = RecipeTreeDatabase.get_all_nodes()
 
 	gold = GameSave.get_gold()
 
@@ -553,50 +573,103 @@ func claim_quest_reward(quest: Quest) -> bool:
 	return true
 
 
-## --- Árbol de habilidades ---
+## --- Árboles de progresión (Efectos / Habilidades / Recetas) ---
+##
+## Los 3 árboles se gestionan con la misma lógica de desbloqueo (mismo
+## "skill_points", mismas reglas de prerrequisitos), así que las 3
+## funciones públicas por árbol (is_X_unlocked/can_unlock_X/unlock_X)
+## son wrappers finos sobre estas 3 privadas genéricas, en vez de
+## repetir el mismo cuerpo 3 veces.
 
-## Suma stat_bonuses de todos los nodos desbloqueados, con las mismas
-## claves que Equipment.get_total_bonus() (así recalculate_stats() las
-## trata exactamente igual).
+func _tree_is_unlocked(unlocked: Dictionary, node: SkillNode) -> bool:
+	return node != null and unlocked.has(node.skill_id)
+
+
+func _tree_can_unlock(unlocked: Dictionary, node: SkillNode) -> bool:
+	if node == null or _tree_is_unlocked(unlocked, node):
+		return false
+	if skill_points < node.cost:
+		return false
+	for required_id in node.requires:
+		if not unlocked.has(required_id):
+			return false
+	return true
+
+
+func _tree_unlock(unlocked: Dictionary, node: SkillNode, changed_signal: Signal) -> bool:
+	if not _tree_can_unlock(unlocked, node):
+		return false
+	unlocked[node.skill_id] = true
+	skill_points -= node.cost
+	recalculate_stats()
+	changed_signal.emit()
+	return true
+
+
+## Suma stat_bonuses de todos los nodos desbloqueados de un árbol, con
+## las mismas claves que Equipment.get_total_bonus() (así
+## recalculate_stats() las trata exactamente igual). El árbol de
+## Recetas no aporta bonus de stats (sus nodos no tienen stat_bonuses),
+## solo el de Efectos y el de Habilidades (armas).
 func get_total_skill_bonus() -> Dictionary:
 	var totals := {
 		"estabilidad": 0.0, "agilidad": 0.0, "destreza": 0.0, "punteria": 0.0,
 		"fuerza": 0.0, "voluntad": 0.0, "canalizacion": 0.0, "conexion_elemental": 0.0,
 		"vida_base": 0.0, "aguante_base": 0.0, "mana_base": 0.0,
 	}
-	for node in skill_tree_nodes:
-		if unlocked_skill_ids.has(node.skill_id):
-			for key in node.stat_bonuses.keys():
-				if totals.has(key):
-					totals[key] += node.stat_bonuses[key]
+	_accumulate_tree_bonus(totals, skill_tree_nodes, unlocked_skill_ids)
+	_accumulate_tree_bonus(totals, weapon_tree_nodes, unlocked_weapon_ids)
 	return totals
 
 
+func _accumulate_tree_bonus(totals: Dictionary, nodes: Array[SkillNode], unlocked: Dictionary) -> void:
+	for node in nodes:
+		if unlocked.has(node.skill_id):
+			for key in node.stat_bonuses.keys():
+				if totals.has(key):
+					totals[key] += node.stat_bonuses[key]
+
+
+## --- Árbol de Efectos ---
+
 func is_skill_unlocked(node: SkillNode) -> bool:
-	return unlocked_skill_ids.has(node.skill_id)
+	return _tree_is_unlocked(unlocked_skill_ids, node)
 
 
-## Un nodo se puede desbloquear si no lo está ya, hay puntos suficientes
-## y todos sus prerrequisitos (node.requires) ya están desbloqueados.
 func can_unlock_skill(node: SkillNode) -> bool:
-	if node == null or is_skill_unlocked(node):
-		return false
-	if skill_points < node.cost:
-		return false
-	for required_id in node.requires:
-		if not unlocked_skill_ids.has(required_id):
-			return false
-	return true
+	return _tree_can_unlock(unlocked_skill_ids, node)
 
 
 func unlock_skill(node: SkillNode) -> bool:
-	if not can_unlock_skill(node):
-		return false
-	unlocked_skill_ids[node.skill_id] = true
-	skill_points -= node.cost
-	recalculate_stats()
-	skill_tree_changed.emit()
-	return true
+	return _tree_unlock(unlocked_skill_ids, node, skill_tree_changed)
+
+
+## --- Árbol de Habilidades (armas por clase + Escudo) ---
+
+func is_weapon_unlocked(node: SkillNode) -> bool:
+	return _tree_is_unlocked(unlocked_weapon_ids, node)
+
+
+func can_unlock_weapon(node: SkillNode) -> bool:
+	return _tree_can_unlock(unlocked_weapon_ids, node)
+
+
+func unlock_weapon(node: SkillNode) -> bool:
+	return _tree_unlock(unlocked_weapon_ids, node, weapon_tree_changed)
+
+
+## --- Árbol de Recetas ---
+
+func is_recipe_node_unlocked(node: SkillNode) -> bool:
+	return _tree_is_unlocked(unlocked_recipe_ids, node)
+
+
+func can_unlock_recipe_node(node: SkillNode) -> bool:
+	return _tree_can_unlock(unlocked_recipe_ids, node)
+
+
+func unlock_recipe_node(node: SkillNode) -> bool:
+	return _tree_unlock(unlocked_recipe_ids, node, recipe_tree_changed)
 
 
 ## --- Recoger / soltar objetos del suelo ---
