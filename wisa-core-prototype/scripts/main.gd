@@ -52,6 +52,16 @@ var gold_label: Label
 var world_drop_zone: WorldDropZone
 var drop_quantity_popup: PopupPanel
 
+var skill_tree_panel: Control
+var skill_tree_area: Control
+var skill_points_label: Label
+var skill_node_buttons: Dictionary = {}
+var skill_tree_lines: Array = []
+
+const SKILL_CELL_SIZE := Vector2(90, 90)
+const SKILL_NODE_SIZE := Vector2(56, 56)
+const SKILL_TREE_ORIGIN := Vector2(30, 30)
+
 
 func _ready() -> void:
 	_build_ui()
@@ -65,6 +75,7 @@ func _ready() -> void:
 	player.gold_changed.connect(_on_gold_changed)
 	player.quests_changed.connect(_refresh_quests_ui)
 	player.pickup_target_changed.connect(_on_pickup_target_changed)
+	player.skill_tree_changed.connect(_refresh_skill_tree_ui)
 	_on_player_health_changed(player.current_health, player.max_health)
 	_on_player_stamina_changed(player.current_stamina, player.max_stamina)
 	_build_inventory_ui()
@@ -73,6 +84,7 @@ func _ready() -> void:
 	_build_crafting_ui()
 	_build_recipes_ui()
 	_build_quests_ui()
+	_build_skill_tree_ui()
 
 	crafting_station.player_entered_range.connect(_on_crafting_range_entered)
 	crafting_station.player_exited_range.connect(_on_crafting_range_exited)
@@ -99,6 +111,8 @@ func _input(event: InputEvent) -> void:
 			_toggle_window(recipes_panel, _refresh_recipes_ui)
 		elif event.physical_keycode == KEY_Q:
 			_toggle_window(quests_panel, _refresh_quests_ui)
+		elif event.physical_keycode == KEY_T:
+			_toggle_window(skill_tree_panel, _refresh_skill_tree_ui)
 		elif event.physical_keycode == KEY_E:
 			if near_crafting_station:
 				_toggle_window(crafting_panel, _refresh_crafting_ui)
@@ -223,7 +237,7 @@ func _build_ui() -> void:
 	# --- Instrucciones, ancladas arriba a la derecha ---
 	var instructions := Label.new()
 	instructions.position = Vector2(vp_size.x - 320.0, 20)
-	instructions.text = "WASD: Moverse\nTab: Seleccionar objetivo\nClic izq / 1: Ataque básico\n2: Golpe de poder\nEspacio: Esquivar\nF: Recoger objeto\nI: Inventario\nQ: Misiones\nR: Recetario"
+	instructions.text = "WASD: Moverse\nTab: Seleccionar objetivo\nClic izq / 1: Ataque básico\n2: Golpe de poder\nEspacio: Esquivar\nF: Recoger objeto\nI: Inventario\nQ: Misiones\nT: Árbol de habilidades\nR: Recetario"
 	ui.add_child(instructions)
 
 	# --- Aviso de interacción con la estación de crafteo ---
@@ -1113,3 +1127,169 @@ func _on_claim_quest_pressed(quest: Quest) -> void:
 	if player.claim_quest_reward(quest):
 		_refresh_quests_ui()
 		_refresh_inventory_ui()
+
+
+## --- Ventana de Árbol de Habilidades (T) ---
+##
+## BASE de partida: dibuja los nodos de SkillTreeDatabase en una
+## rejilla (columna = rama, fila = tier) con líneas de conexión hacia
+## sus prerrequisitos, y permite desbloquearlos con un clic si hay
+## puntos suficientes. El contenido real (ramas, nombres, bonus,
+## costes) se ajusta por completo en scripts/skill_tree_database.gd
+## sin tocar nada de esta ventana.
+
+func _build_skill_tree_ui() -> void:
+	if ui_canvas == null:
+		return
+
+	var win := _make_window("Árbol de Habilidades", Vector2(420.0, 420.0))
+	skill_tree_panel = win["panel"]
+	var box: VBoxContainer = win["box"]
+
+	skill_points_label = Label.new()
+	skill_points_label.text = "Puntos disponibles: 0"
+	skill_points_label.add_theme_color_override("font_color", Color(0.85, 0.65, 0.15))
+	skill_points_label.add_theme_font_size_override("font_size", 15)
+	box.add_child(skill_points_label)
+
+	var hint := Label.new()
+	hint.text = "Pasa el ratón sobre un nodo para ver su descripción. Clic para desbloquear."
+	hint.add_theme_font_size_override("font_size", 11)
+	hint.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD
+	hint.custom_minimum_size = Vector2(280, 0)
+	box.add_child(hint)
+
+	# Tamaño del área según la rejilla más ancha/alta que haya en la BD.
+	var max_col := 0
+	var max_row := 0
+	for node in player.skill_tree_nodes:
+		max_col = max(max_col, node.grid_position.x)
+		max_row = max(max_row, node.grid_position.y)
+
+	skill_tree_area = Control.new()
+	skill_tree_area.custom_minimum_size = SKILL_TREE_ORIGIN * 2.0 + Vector2(max_col + 1, max_row + 1) * SKILL_CELL_SIZE
+	box.add_child(skill_tree_area)
+
+	# Líneas de conexión primero, para que los nodos queden por encima.
+	skill_tree_lines.clear()
+	var by_id: Dictionary = {}
+	for node in player.skill_tree_nodes:
+		by_id[node.skill_id] = node
+
+	for node in player.skill_tree_nodes:
+		for required_id in node.requires:
+			var parent_node: SkillNode = by_id.get(required_id)
+			if parent_node == null:
+				continue
+			var line := Line2D.new()
+			line.width = 3.0
+			line.default_color = Color(0.35, 0.3, 0.4)
+			line.points = PackedVector2Array([_skill_node_center(parent_node), _skill_node_center(node)])
+			skill_tree_area.add_child(line)
+			skill_tree_lines.append({"line": line, "from": parent_node, "to": node})
+
+	skill_node_buttons.clear()
+	for node in player.skill_tree_nodes:
+		var button := _make_skill_node_button(node)
+		button.position = _skill_node_top_left(node)
+		button.custom_minimum_size = SKILL_NODE_SIZE
+		button.size = SKILL_NODE_SIZE
+		button.pressed.connect(_on_skill_node_pressed.bind(node))
+		skill_tree_area.add_child(button)
+		skill_node_buttons[node.skill_id] = button
+
+	_refresh_skill_tree_ui()
+
+
+func _skill_node_top_left(node: SkillNode) -> Vector2:
+	return SKILL_TREE_ORIGIN + Vector2(node.grid_position.x, node.grid_position.y) * SKILL_CELL_SIZE
+
+
+func _skill_node_center(node: SkillNode) -> Vector2:
+	return _skill_node_top_left(node) + SKILL_NODE_SIZE / 2.0
+
+
+func _make_skill_node_button(node: SkillNode) -> Button:
+	var button := Button.new()
+	# Inicial del nombre como "icono" provisional, en la línea del resto
+	# del arte gray-box del prototipo (sin sprites propios todavía).
+	button.text = node.skill_name.substr(0, 1)
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_color_override("font_color", Color(0.95, 0.93, 0.96))
+	button.clip_text = true
+	button.focus_mode = Control.FOCUS_NONE
+
+	var style := StyleBoxFlat.new()
+	style.border_color = Color(0.039, 0.031, 0.063)
+	style.set_border_width_all(3)
+	style.set_corner_radius_all(28)
+	button.add_theme_stylebox_override("normal", style)
+	button.add_theme_stylebox_override("hover", style.duplicate())
+	button.add_theme_stylebox_override("pressed", style.duplicate())
+	button.add_theme_stylebox_override("disabled", style.duplicate())
+
+	return button
+
+
+func _refresh_skill_tree_ui() -> void:
+	if skill_points_label == null:
+		return
+	skill_points_label.text = "Puntos disponibles: %d" % player.skill_points
+
+	for node in player.skill_tree_nodes:
+		var button: Button = skill_node_buttons.get(node.skill_id)
+		if button == null:
+			continue
+
+		var unlocked: bool = player.is_skill_unlocked(node)
+		var can_unlock: bool = player.can_unlock_skill(node)
+
+		var bg_color: Color
+		if unlocked:
+			bg_color = node.color
+			button.disabled = true
+			button.modulate = Color(1, 1, 1, 1)
+		elif can_unlock:
+			bg_color = node.color.darkened(0.35)
+			button.disabled = false
+			button.modulate = Color(1, 1, 1, 1)
+		else:
+			bg_color = Color(0.169, 0.125, 0.220, 0.85)
+			button.disabled = true
+			button.modulate = Color(1, 1, 1, 0.55)
+
+		# El botón se pinta con la stylebox de "normal" o de "disabled"
+		# según button.disabled, así que hay que mantener ambas iguales
+		# para que el color se vea siempre, esté clicable o no.
+		for state in ["normal", "hover", "pressed", "disabled"]:
+			var state_style: StyleBoxFlat = button.get_theme_stylebox(state)
+			state_style.bg_color = bg_color
+
+		var status_text: String
+		if unlocked:
+			status_text = "Desbloqueada"
+		elif can_unlock:
+			status_text = "Disponible"
+		else:
+			status_text = "Bloqueada"
+		button.tooltip_text = "%s (%s)\nCoste: %d punto(s)\n%s\n%s" % [
+			node.skill_name, node.branch, node.cost, node.description, status_text
+		]
+
+	for entry in skill_tree_lines:
+		var from_node: SkillNode = entry["from"]
+		var to_node: SkillNode = entry["to"]
+		var line: Line2D = entry["line"]
+		if player.is_skill_unlocked(from_node) and player.is_skill_unlocked(to_node):
+			line.default_color = Color(0.45, 0.80, 0.50)
+		elif player.is_skill_unlocked(from_node):
+			line.default_color = Color(0.75, 0.65, 0.35)
+		else:
+			line.default_color = Color(0.35, 0.3, 0.4)
+
+
+func _on_skill_node_pressed(node: SkillNode) -> void:
+	if player.unlock_skill(node):
+		_refresh_skill_tree_ui()
+		_refresh_character_ui()

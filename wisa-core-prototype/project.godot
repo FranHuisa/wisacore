@@ -8,10 +8,6 @@
 
 config_version=5
 
-[autoload]
-
-GameSave="*res://scripts/game_save.gd"
-
 [animation]
 
 compatibility/default_parent_skeleton_in_mesh_instance_3d=true
@@ -21,6 +17,10 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 config/name="WisaCore"
 run/main_scene="res://scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
+
+[autoload]
+
+GameSave="*res://scripts/game_save.gd"
 
 [display]
 

@@ -54,6 +54,15 @@ var completed_quests: Array[Quest] = []
 ## Objeto del suelo más cercano dentro de "pickup_range" (o null).
 var nearby_world_item: WorldItem = null
 
+## Árbol de habilidades (BASE, ver skill_tree_database.gd). Puntos de
+## partida provisionales para poder probar la ventana ya mismo; cuando
+## se defina de dónde vienen de verdad (subir de nivel, misiones...)
+## solo hay que cambiar cómo se incrementa "skill_points", el resto
+## del sistema no se toca.
+var skill_points: int = 3
+var skill_tree_nodes: Array[SkillNode] = []
+var unlocked_skill_ids: Dictionary = {}
+
 var current_health: float
 var current_stamina: float
 var current_mana: float
@@ -78,6 +87,7 @@ signal gold_changed(amount: int)
 signal quests_changed
 ## item_label vacío = ya no hay ningún objeto del suelo al alcance.
 signal pickup_target_changed(item_label: String)
+signal skill_tree_changed
 
 @onready var attack_area: Area2D = $AttackArea
 @onready var sprite: Polygon2D = $Sprite
@@ -106,6 +116,7 @@ func _ready() -> void:
 	_add_starting_items()
 	known_recipes = RecipeDatabase.get_all_recipes()
 	active_quests = QuestDatabase.get_starting_quests()
+	skill_tree_nodes = SkillTreeDatabase.get_all_nodes()
 
 	gold = GameSave.get_gold()
 
@@ -278,20 +289,22 @@ func _add_starting_items() -> void:
 
 func recalculate_stats() -> void:
 	# Combina los atributos base (StatBlock) con los bonus de todo el
-	# equipamiento puesto, y recalcula todas las estadísticas derivadas.
-	var bonus: Dictionary = equipment.get_total_bonus()
+	# equipamiento puesto y del árbol de habilidades desbloqueado, y
+	# recalcula todas las estadísticas derivadas.
+	var equip_bonus: Dictionary = equipment.get_total_bonus()
+	var skill_bonus: Dictionary = get_total_skill_bonus()
 	var effective: StatBlock = stats.duplicate()
-	effective.estabilidad += bonus["estabilidad"]
-	effective.agilidad += bonus["agilidad"]
-	effective.destreza += bonus["destreza"]
-	effective.punteria += bonus["punteria"]
-	effective.fuerza += bonus["fuerza"]
-	effective.voluntad += bonus["voluntad"]
-	effective.canalizacion += bonus["canalizacion"]
-	effective.conexion_elemental += bonus["conexion_elemental"]
-	effective.vida_base += bonus["vida_base"]
-	effective.aguante_base += bonus["aguante_base"]
-	effective.mana_base += bonus["mana_base"]
+	effective.estabilidad += equip_bonus["estabilidad"] + skill_bonus["estabilidad"]
+	effective.agilidad += equip_bonus["agilidad"] + skill_bonus["agilidad"]
+	effective.destreza += equip_bonus["destreza"] + skill_bonus["destreza"]
+	effective.punteria += equip_bonus["punteria"] + skill_bonus["punteria"]
+	effective.fuerza += equip_bonus["fuerza"] + skill_bonus["fuerza"]
+	effective.voluntad += equip_bonus["voluntad"] + skill_bonus["voluntad"]
+	effective.canalizacion += equip_bonus["canalizacion"] + skill_bonus["canalizacion"]
+	effective.conexion_elemental += equip_bonus["conexion_elemental"] + skill_bonus["conexion_elemental"]
+	effective.vida_base += equip_bonus["vida_base"] + skill_bonus["vida_base"]
+	effective.aguante_base += equip_bonus["aguante_base"] + skill_bonus["aguante_base"]
+	effective.mana_base += equip_bonus["mana_base"] + skill_bonus["mana_base"]
 	effective_stats = effective
 
 	max_health = effective.get_max_health()
@@ -534,6 +547,52 @@ func claim_quest_reward(quest: Quest) -> bool:
 	return true
 
 
+## --- Árbol de habilidades ---
+
+## Suma stat_bonuses de todos los nodos desbloqueados, con las mismas
+## claves que Equipment.get_total_bonus() (así recalculate_stats() las
+## trata exactamente igual).
+func get_total_skill_bonus() -> Dictionary:
+	var totals := {
+		"estabilidad": 0.0, "agilidad": 0.0, "destreza": 0.0, "punteria": 0.0,
+		"fuerza": 0.0, "voluntad": 0.0, "canalizacion": 0.0, "conexion_elemental": 0.0,
+		"vida_base": 0.0, "aguante_base": 0.0, "mana_base": 0.0,
+	}
+	for node in skill_tree_nodes:
+		if unlocked_skill_ids.has(node.skill_id):
+			for key in node.stat_bonuses.keys():
+				if totals.has(key):
+					totals[key] += node.stat_bonuses[key]
+	return totals
+
+
+func is_skill_unlocked(node: SkillNode) -> bool:
+	return unlocked_skill_ids.has(node.skill_id)
+
+
+## Un nodo se puede desbloquear si no lo está ya, hay puntos suficientes
+## y todos sus prerrequisitos (node.requires) ya están desbloqueados.
+func can_unlock_skill(node: SkillNode) -> bool:
+	if node == null or is_skill_unlocked(node):
+		return false
+	if skill_points < node.cost:
+		return false
+	for required_id in node.requires:
+		if not unlocked_skill_ids.has(required_id):
+			return false
+	return true
+
+
+func unlock_skill(node: SkillNode) -> bool:
+	if not can_unlock_skill(node):
+		return false
+	unlocked_skill_ids[node.skill_id] = true
+	skill_points -= node.cost
+	recalculate_stats()
+	skill_tree_changed.emit()
+	return true
+
+
 ## --- Recoger / soltar objetos del suelo ---
 
 ## Escanea (por distancia, igual que _cycle_target hace con "enemies")
@@ -544,7 +603,7 @@ func _scan_nearby_pickup() -> void:
 	var closest_dist := pickup_range
 
 	for candidate in items:
-		if not is_instance_valid(candidate):
+		if not is_instance_valid(candidate) or candidate.is_queued_for_deletion():
 			continue
 		var dist := global_position.distance_to(candidate.global_position)
 		if dist <= closest_dist:
@@ -594,6 +653,14 @@ func _remove_nearby_world_item(world_item: WorldItem) -> void:
 	if nearby_world_item == world_item:
 		nearby_world_item = null
 		pickup_target_changed.emit("")
+	# queue_free() no borra el nodo al instante (Godot lo difiere al final
+	# del frame), así que si no lo sacamos del grupo ya mismo, el siguiente
+	# _scan_nearby_pickup() (que corre cada frame de física) todavía lo
+	# encontraría -sigue siendo válido un instante más- y, como el jugador
+	# está encima, lo volvería a seleccionar como "más cercano": el aviso
+	# de recoger reaparecería con el objeto que se acaba de recoger.
+	if world_item.is_in_group("world_items"):
+		world_item.remove_from_group("world_items")
 	world_item.queue_free()
 
 
