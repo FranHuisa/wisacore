@@ -31,6 +31,10 @@ enum Rarity { COMUN, POCO_COMUN, RARO, EPICO, LEGENDARIO }
 
 @export var stack_size: int = 1
 
+## Si es true, este objeto es moneda (oro): al recogerlo del suelo no
+## ocupa una ranura de la mochila, se suma directamente a Player.gold.
+@export var is_currency: bool = false
+
 ## Color usado como "icono" provisional en la UI (sin arte todavía).
 @export var color: Color = Color(0.4, 0.4, 0.4)
 

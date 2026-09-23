@@ -53,6 +53,40 @@ func add_item(item: ItemData, quantity: int = 1) -> bool:
 	return false  # Inventario lleno
 
 
+## Comprueba (sin modificar nada) si cabría "quantity" unidades de "item".
+## Usada antes de recoger un objeto del suelo: si no hay espacio, no se
+## debe tocar el inventario ni el objeto del suelo (add_item, en cambio,
+## puede ir apilando parcialmente mientras busca hueco, así que este
+## método hace de "dry run" para poder decidir antes de tocar nada).
+func has_space_for(item: ItemData, quantity: int) -> bool:
+	var remaining := quantity
+	if remaining <= 0:
+		return true
+
+	if item.stack_size > 1:
+		for i in range(SIZE):
+			var entry = slots[i]
+			if entry == null:
+				continue
+			var same_item: bool
+			if item.item_id != "" and entry["item"].item_id == item.item_id:
+				same_item = true
+			else:
+				same_item = entry["item"] == item
+			if same_item and entry["quantity"] < item.stack_size:
+				remaining -= (item.stack_size - entry["quantity"])
+				if remaining <= 0:
+					return true
+
+	for i in range(SIZE):
+		if slots[i] == null:
+			remaining -= max(item.stack_size, 1)
+			if remaining <= 0:
+				return true
+
+	return false
+
+
 func find_first_empty() -> int:
 	for i in range(SIZE):
 		if slots[i] == null:

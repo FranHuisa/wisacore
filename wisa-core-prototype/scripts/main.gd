@@ -42,6 +42,16 @@ var crafting_list_box: VBoxContainer
 var recipes_panel: Control
 var recipes_list_box: VBoxContainer
 
+var quests_panel: Control
+var quests_active_box: VBoxContainer
+var quests_completed_box: VBoxContainer
+
+var pickup_prompt_label: Label
+var gold_label: Label
+
+var world_drop_zone: WorldDropZone
+var drop_quantity_popup: PopupPanel
+
 
 func _ready() -> void:
 	_build_ui()
@@ -51,6 +61,10 @@ func _ready() -> void:
 	player.ability_cooldown_changed.connect(_on_ability_cooldown_changed)
 	player.inventory_changed.connect(_refresh_inventory_ui)
 	player.inventory_changed.connect(_refresh_character_ui)
+	player.inventory_changed.connect(_refresh_quests_ui)
+	player.gold_changed.connect(_on_gold_changed)
+	player.quests_changed.connect(_refresh_quests_ui)
+	player.pickup_target_changed.connect(_on_pickup_target_changed)
 	_on_player_health_changed(player.current_health, player.max_health)
 	_on_player_stamina_changed(player.current_stamina, player.max_stamina)
 	_build_inventory_ui()
@@ -58,6 +72,7 @@ func _ready() -> void:
 	_build_abilities_ui()
 	_build_crafting_ui()
 	_build_recipes_ui()
+	_build_quests_ui()
 
 	crafting_station.player_entered_range.connect(_on_crafting_range_entered)
 	crafting_station.player_exited_range.connect(_on_crafting_range_exited)
@@ -82,6 +97,8 @@ func _input(event: InputEvent) -> void:
 			_toggle_window(abilities_panel, Callable())
 		elif event.physical_keycode == KEY_R:
 			_toggle_window(recipes_panel, _refresh_recipes_ui)
+		elif event.physical_keycode == KEY_Q:
+			_toggle_window(quests_panel, _refresh_quests_ui)
 		elif event.physical_keycode == KEY_E:
 			if near_crafting_station:
 				_toggle_window(crafting_panel, _refresh_crafting_ui)
@@ -112,6 +129,20 @@ func _on_crafting_range_exited() -> void:
 	craft_prompt_label.visible = false
 	if crafting_panel != null:
 		crafting_panel.visible = false
+
+
+func _on_gold_changed(_amount: int) -> void:
+	_refresh_inventory_ui()
+
+
+func _on_pickup_target_changed(item_label: String) -> void:
+	if pickup_prompt_label == null:
+		return
+	if item_label == "":
+		pickup_prompt_label.visible = false
+	else:
+		pickup_prompt_label.text = "Pulsa F para recoger: %s" % item_label
+		pickup_prompt_label.visible = true
 
 
 func _on_quick_equip_shortcut(index: int) -> void:
@@ -192,7 +223,7 @@ func _build_ui() -> void:
 	# --- Instrucciones, ancladas arriba a la derecha ---
 	var instructions := Label.new()
 	instructions.position = Vector2(vp_size.x - 320.0, 20)
-	instructions.text = "WASD: Moverse\nTab: Seleccionar objetivo\nClic izq / 1: Ataque básico\n2: Golpe de poder\nEspacio: Esquivar\nI: Inventario\nR: Recetario"
+	instructions.text = "WASD: Moverse\nTab: Seleccionar objetivo\nClic izq / 1: Ataque básico\n2: Golpe de poder\nEspacio: Esquivar\nF: Recoger objeto\nI: Inventario\nQ: Misiones\nR: Recetario"
 	ui.add_child(instructions)
 
 	# --- Aviso de interacción con la estación de crafteo ---
@@ -203,6 +234,25 @@ func _build_ui() -> void:
 	craft_prompt_label.position = Vector2(vp_size.x / 2.0 - 90.0, vp_size.y - 140.0)
 	craft_prompt_label.visible = false
 	ui.add_child(craft_prompt_label)
+
+	# --- Aviso de "recoger objeto del suelo" ---
+	pickup_prompt_label = Label.new()
+	pickup_prompt_label.text = ""
+	pickup_prompt_label.add_theme_font_size_override("font_size", 18)
+	pickup_prompt_label.add_theme_color_override("font_color", Color(0.95, 0.9, 0.6))
+	pickup_prompt_label.position = Vector2(vp_size.x / 2.0 - 120.0, vp_size.y - 165.0)
+	pickup_prompt_label.visible = false
+	ui.add_child(pickup_prompt_label)
+
+	# --- Zona invisible para soltar objetos de la mochila en el mundo ---
+	# Se añade a "ui" (que se añadió antes que "windows_layer" a "canvas"),
+	# así que queda por debajo de todas las ventanas flotantes y solo
+	# recibe el drop cuando el jugador suelta fuera de ellas.
+	world_drop_zone = WorldDropZone.new()
+	world_drop_zone.set_anchors_preset(Control.PRESET_FULL_RECT)
+	world_drop_zone.mouse_filter = Control.MOUSE_FILTER_PASS
+	world_drop_zone.on_item_dropped = _on_backpack_item_dropped_to_world
+	ui.add_child(world_drop_zone)
 
 
 func _make_ability_slot(label_text: String) -> Panel:
@@ -318,6 +368,13 @@ func _build_inventory_ui() -> void:
 	var win := _make_window("Inventario", Vector2(vp_size.x - 380.0, 90.0))
 	inventory_panel = win["panel"]
 	var window_box: VBoxContainer = win["box"]
+
+	# --- Oro persistente ---
+	gold_label = Label.new()
+	gold_label.text = "Oro: 0"
+	gold_label.add_theme_color_override("font_color", Color(0.85, 0.65, 0.15))
+	gold_label.add_theme_font_size_override("font_size", 15)
+	window_box.add_child(gold_label)
 
 	# --- Equipamiento como un "muñeco": silueta central + ranuras con icono ---
 	var equip_title := Label.new()
@@ -469,6 +526,9 @@ func _make_slot_button(text: String) -> ItemSlotButton:
 
 
 func _refresh_inventory_ui() -> void:
+	if gold_label != null:
+		gold_label.text = "Oro: %d" % player.gold
+
 	for slot in equipment_buttons.keys():
 		var button: ItemSlotButton = equipment_buttons[slot]
 		var item: ItemData = player.equipment.slots[slot]
@@ -536,6 +596,90 @@ func _handle_item_drop(data: Dictionary, target: ItemSlotButton) -> void:
 		elif data.get("kind") == "equip":
 			player.swap_equipped(data["equip_slot"], target.equip_slot_id)
 	_refresh_inventory_ui()
+
+
+## Se llama desde WorldDropZone (world_drop_zone.gd) cuando se suelta un
+## objeto de la mochila fuera de cualquier ventana: si el stack tiene
+## más de 1 unidad se pregunta la cantidad con un popup; si solo hay 1,
+## se suelta directamente sin fricción innecesaria.
+func _on_backpack_item_dropped_to_world(data: Dictionary, _at_position: Vector2) -> void:
+	if data.get("kind") != "backpack":
+		return
+	var index: int = data.get("backpack_index", -1)
+	if index < 0:
+		return
+	var entry = player.inventory.get_at(index)
+	if entry == null:
+		return
+
+	var quantity: int = entry["quantity"]
+	if quantity <= 1:
+		player.drop_item_from_backpack(index, 1)
+		_refresh_inventory_ui()
+	else:
+		_open_drop_quantity_popup(index, quantity)
+
+
+## Pequeña ventana emergente para elegir cuántas unidades de un stack
+## soltar (reutiliza el mismo estilo visual que _make_window/_make_slot_button).
+func _open_drop_quantity_popup(index: int, max_quantity: int) -> void:
+	if drop_quantity_popup != null and is_instance_valid(drop_quantity_popup):
+		drop_quantity_popup.queue_free()
+		drop_quantity_popup = null
+
+	var entry = player.inventory.get_at(index)
+	if entry == null:
+		return
+	var item: ItemData = entry["item"]
+
+	var popup := PopupPanel.new()
+	var popup_style := StyleBoxFlat.new()
+	popup_style.bg_color = Color(0.11, 0.09, 0.14, 0.98)
+	popup_style.border_color = Color(0.039, 0.031, 0.063)
+	popup_style.set_border_width_all(3)
+	popup_style.set_content_margin_all(14)
+	popup.add_theme_stylebox_override("panel", popup_style)
+	_get_windows_layer().add_child(popup)
+	drop_quantity_popup = popup
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	popup.add_child(box)
+
+	var title := Label.new()
+	title.text = "Soltar %s" % item.item_name
+	title.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+	title.add_theme_font_size_override("font_size", 15)
+	box.add_child(title)
+
+	var spin := SpinBox.new()
+	spin.min_value = 1
+	spin.max_value = max_quantity
+	spin.value = max_quantity
+	spin.custom_minimum_size = Vector2(160, 0)
+	box.add_child(spin)
+
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	box.add_child(buttons)
+
+	var confirm_button := _make_slot_button("Soltar")
+	confirm_button.pressed.connect(func() -> void:
+		player.drop_item_from_backpack(index, int(spin.value))
+		_refresh_inventory_ui()
+		popup.hide()
+		popup.queue_free()
+	)
+	buttons.add_child(confirm_button)
+
+	var cancel_button := _make_slot_button("Cancelar")
+	cancel_button.pressed.connect(func() -> void:
+		popup.hide()
+		popup.queue_free()
+	)
+	buttons.add_child(cancel_button)
+
+	popup.popup_centered(Vector2(220, 130))
 
 
 func _on_ability_cooldown_changed(ability_name: String, time_left: float, max_time: float) -> void:
@@ -818,3 +962,154 @@ func _make_recipe_row(recipe: Recipe, craftable_mode: bool) -> Control:
 func _on_craft_pressed(recipe: Recipe) -> void:
 	if player.craft(recipe):
 		_refresh_crafting_ui()
+
+
+## --- Ventana de Misiones (Q): activas con objetivos/progreso y completadas ---
+
+func _build_quests_ui() -> void:
+	if ui_canvas == null:
+		return
+
+	var win := _make_window("Misiones", Vector2(420.0, 420.0))
+	quests_panel = win["panel"]
+	var box: VBoxContainer = win["box"]
+	box.custom_minimum_size = Vector2(300, 0)
+
+	var active_title := Label.new()
+	active_title.text = "Misiones activas"
+	active_title.add_theme_color_override("font_color", Color(0.478, 0.125, 0.188))
+	active_title.add_theme_font_size_override("font_size", 16)
+	box.add_child(active_title)
+
+	quests_active_box = VBoxContainer.new()
+	quests_active_box.add_theme_constant_override("separation", 10)
+	box.add_child(quests_active_box)
+
+	box.add_child(HSeparator.new())
+
+	var completed_title := Label.new()
+	completed_title.text = "Misiones completadas"
+	completed_title.add_theme_color_override("font_color", Color(0.478, 0.125, 0.188))
+	completed_title.add_theme_font_size_override("font_size", 16)
+	box.add_child(completed_title)
+
+	quests_completed_box = VBoxContainer.new()
+	quests_completed_box.add_theme_constant_override("separation", 6)
+	box.add_child(quests_completed_box)
+
+	_refresh_quests_ui()
+
+
+func _refresh_quests_ui() -> void:
+	if quests_active_box == null or quests_completed_box == null:
+		return
+
+	for child in quests_active_box.get_children():
+		child.queue_free()
+	for child in quests_completed_box.get_children():
+		child.queue_free()
+
+	if player.active_quests.is_empty():
+		var none_active := Label.new()
+		none_active.text = "(sin misiones activas)"
+		none_active.add_theme_font_size_override("font_size", 12)
+		none_active.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
+		quests_active_box.add_child(none_active)
+	else:
+		for quest in player.active_quests:
+			quests_active_box.add_child(_make_quest_row(quest))
+
+	if player.completed_quests.is_empty():
+		var none_completed := Label.new()
+		none_completed.text = "(ninguna todavía)"
+		none_completed.add_theme_font_size_override("font_size", 12)
+		none_completed.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
+		quests_completed_box.add_child(none_completed)
+	else:
+		for quest in player.completed_quests:
+			quests_completed_box.add_child(_make_completed_quest_row(quest))
+
+
+## Fila de una misión activa: nombre, descripción, objetivos con su
+## progreso ("X / Y", en verde si está completo) y botón para reclamar
+## la recompensa en cuanto todos los objetivos están cumplidos.
+func _make_quest_row(quest: Quest) -> Control:
+	var card := VBoxContainer.new()
+	card.add_theme_constant_override("separation", 3)
+
+	var name_label := Label.new()
+	name_label.text = quest.quest_name
+	name_label.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+	name_label.add_theme_font_size_override("font_size", 14)
+	card.add_child(name_label)
+
+	if quest.description != "":
+		var desc_label := Label.new()
+		desc_label.text = quest.description
+		desc_label.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
+		desc_label.add_theme_font_size_override("font_size", 11)
+		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+		desc_label.custom_minimum_size = Vector2(270, 0)
+		card.add_child(desc_label)
+
+	for objective in quest.objectives:
+		_sync_objective_progress(objective)
+		var obj_label := Label.new()
+		obj_label.text = "%s: %d / %d" % [objective.description, objective.current_amount, objective.required_amount]
+		obj_label.add_theme_font_size_override("font_size", 12)
+		if objective.is_complete():
+			obj_label.add_theme_color_override("font_color", Color(0.45, 0.80, 0.50))
+		else:
+			obj_label.add_theme_color_override("font_color", Color(0.90, 0.30, 0.30))
+		card.add_child(obj_label)
+
+	var reward_parts: Array = []
+	if quest.reward_gold > 0:
+		reward_parts.append("%d de oro" % quest.reward_gold)
+	if quest.reward_item_id != "":
+		var reward_item: ItemData = ItemCatalog.get_item(quest.reward_item_id)
+		reward_parts.append("%s x%d" % [reward_item.item_name, quest.reward_item_quantity])
+
+	var reward_label := Label.new()
+	reward_label.text = "Recompensa: " + (", ".join(reward_parts) if not reward_parts.is_empty() else "ninguna")
+	reward_label.add_theme_font_size_override("font_size", 11)
+	reward_label.add_theme_color_override("font_color", Color(0.6, 0.58, 0.62))
+	card.add_child(reward_label)
+
+	if quest.is_complete():
+		var claim_button := _make_slot_button("Reclamar recompensa")
+		claim_button.pressed.connect(_on_claim_quest_pressed.bind(quest))
+		card.add_child(claim_button)
+
+	card.add_child(HSeparator.new())
+	return card
+
+
+func _make_completed_quest_row(quest: Quest) -> Control:
+	var row := VBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
+
+	var name_label := Label.new()
+	name_label.text = "%s (completada)" % quest.quest_name
+	name_label.add_theme_color_override("font_color", Color(0.45, 0.80, 0.50))
+	name_label.add_theme_font_size_override("font_size", 13)
+	row.add_child(name_label)
+
+	row.add_child(HSeparator.new())
+	return row
+
+
+## Los objetivos de tipo COLLECT_ITEM se recalculan en vivo a partir del
+## inventario actual (igual que _make_recipe_row hace con
+## player.count_item para comparar materiales). Los de tipo
+## KILL_ENEMIES no se tocan aquí: su contador solo lo incrementa
+## Player.register_enemy_kill().
+func _sync_objective_progress(objective: QuestObjective) -> void:
+	if objective.kind == QuestObjective.Kind.COLLECT_ITEM and objective.target_id != "":
+		objective.current_amount = min(objective.required_amount, player.count_item(objective.target_id))
+
+
+func _on_claim_quest_pressed(quest: Quest) -> void:
+	if player.claim_quest_reward(quest):
+		_refresh_quests_ui()
+		_refresh_inventory_ui()

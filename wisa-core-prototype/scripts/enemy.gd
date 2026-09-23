@@ -115,6 +115,7 @@ func _attack_player() -> void:
 func take_damage(amount: float) -> void:
 	if state == State.DEAD:
 		return
+	_spawn_damage_number(amount)
 	current_health = max(0.0, current_health - amount)
 	health_changed.emit(current_health, max_health)
 	if current_health <= 0.0:
@@ -123,10 +124,45 @@ func take_damage(amount: float) -> void:
 		state = State.CHASE
 
 
+## Número de daño flotante, puramente visual (ver floating_damage_label.gd).
+## No participa en el cálculo de arriba: solo muestra "amount" ya calculado.
+func _spawn_damage_number(amount: float) -> void:
+	var label := FloatingDamageLabel.new()
+	label.position = Vector2(randf_range(-6.0, 6.0), -34.0)
+	label.setup(amount)
+	add_child(label)
+
+
 func _die() -> void:
 	state = State.DEAD
 	sprite.color = Color(0.1, 0.1, 0.1)
 	set_physics_process(false)
+	_drop_loot()
+	_notify_player_kill()
 	died.emit()
 	await get_tree().create_timer(1.5).timeout
 	queue_free()
+
+
+## Avisa a cualquier jugador presente de que este enemigo ha muerto,
+## para que pueda progresar en misiones de tipo "matar enemigos" (mismo
+## patrón que ya usa _attack_player() para llamar a Player.take_damage
+## directamente, en el otro sentido).
+func _notify_player_kill() -> void:
+	for player in get_tree().get_nodes_in_group("player"):
+		if player.has_method("register_enemy_kill"):
+			player.register_enemy_kill()
+
+
+## Botín al morir: una bolsa de oro (WorldItem con item de moneda), que
+## el jugador puede recoger con F como cualquier otro objeto del suelo.
+func _drop_loot() -> void:
+	var gold_amount := randi_range(3, 8)
+	var world_item := WorldItem.new()
+	world_item.item_data = ItemCatalog.get_item("gold_coin")
+	world_item.quantity = gold_amount
+	var parent := get_parent()
+	if parent == null:
+		return
+	parent.add_child(world_item)
+	world_item.global_position = global_position + Vector2(randf_range(-14.0, 14.0), randf_range(-14.0, 14.0))

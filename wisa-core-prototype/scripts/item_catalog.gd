@@ -77,6 +77,14 @@ static func _build_item(id: String) -> ItemData:
 			item.rarity = ItemData.Rarity.COMUN
 			item.color = Color(0.80, 0.78, 0.70)
 			item.description = "Un vendaje improvisado. Poco elaborado, pero útil en apuros."
+		"gold_coin":
+			item.item_name = "Bolsa de Oro"
+			item.item_type = ItemData.ItemType.MATERIAL
+			item.stack_size = 999
+			item.rarity = ItemData.Rarity.COMUN
+			item.color = Color(0.85, 0.65, 0.15)
+			item.is_currency = true
+			item.description = "Un puñado de monedas. Se añade directamente a tu oro al recogerla, no ocupa hueco en la mochila."
 		_:
 			push_warning("ItemCatalog: item_id desconocido '%s'" % id)
 			item.item_name = "Objeto desconocido (%s)" % id

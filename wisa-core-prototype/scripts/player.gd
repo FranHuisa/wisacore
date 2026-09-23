@@ -28,6 +28,9 @@ extends CharacterBody2D
 @export var stamina_regen_per_second: float = 12.0
 @export var stamina_regen_delay: float = 0.6
 
+## Distancia máxima a la que se puede recoger un objeto del suelo.
+@export var pickup_range: float = 60.0
+
 var move_speed: float
 var max_health: float
 var max_stamina: float
@@ -39,6 +42,17 @@ var inventory: Inventory
 var equipment: Equipment
 var effective_stats: StatBlock
 var known_recipes: Array[Recipe] = []
+
+## Oro persistente (Paso "Oro" del roadmap). Se carga de GameSave al
+## empezar y se guarda automáticamente en cada cambio.
+var gold: int = 0
+
+## Misiones activas y completadas (Paso "Misiones" del roadmap).
+var active_quests: Array[Quest] = []
+var completed_quests: Array[Quest] = []
+
+## Objeto del suelo más cercano dentro de "pickup_range" (o null).
+var nearby_world_item: WorldItem = null
 
 var current_health: float
 var current_stamina: float
@@ -60,9 +74,21 @@ signal target_changed(target: Node2D)
 signal ability_cooldown_changed(ability_name: String, time_left: float, max_time: float)
 signal inventory_changed
 signal died
+signal gold_changed(amount: int)
+signal quests_changed
+## item_label vacío = ya no hay ningún objeto del suelo al alcance.
+signal pickup_target_changed(item_label: String)
 
 @onready var attack_area: Area2D = $AttackArea
 @onready var sprite: Polygon2D = $Sprite
+@onready var head_sprite: Sprite2D = $HeadSprite
+
+## Solo hay sprites de prueba para 6 de las 8 direcciones (falta un
+## "puro" izquierda/derecha): para esos dos casos se reutiliza el
+## sprite diagonal hacia abajo correspondiente, que es el que menos
+## desentona. En cuanto haya sprites propios para esas direcciones,
+## basta con añadir las claces "left"/"right" aquí.
+var _head_textures: Dictionary = {}
 
 
 func _ready() -> void:
@@ -79,6 +105,12 @@ func _ready() -> void:
 	inventory = Inventory.new()
 	_add_starting_items()
 	known_recipes = RecipeDatabase.get_all_recipes()
+	active_quests = QuestDatabase.get_starting_quests()
+
+	gold = GameSave.get_gold()
+
+	_load_head_textures()
+	_update_head_sprite()
 
 	recalculate_stats()
 	current_health = max_health
@@ -88,6 +120,7 @@ func _ready() -> void:
 	add_to_group("player")
 	health_changed.emit(current_health, max_health)
 	stamina_changed.emit(current_stamina, max_stamina)
+	gold_changed.emit(gold)
 
 
 func _add_starting_items() -> void:
@@ -438,6 +471,208 @@ func _remove_item_quantity(item_id: String, amount: int) -> void:
 			inventory.remove_at(i)
 
 
+## --- Oro (persistente vía GameSave) ---
+
+func add_gold(amount: int) -> void:
+	if amount <= 0:
+		return
+	gold += amount
+	GameSave.set_gold(gold)
+	gold_changed.emit(gold)
+
+
+func spend_gold(amount: int) -> bool:
+	if amount <= 0 or gold < amount:
+		return false
+	gold -= amount
+	GameSave.set_gold(gold)
+	gold_changed.emit(gold)
+	return true
+
+
+## --- Misiones ---
+
+## Llamado desde enemy.gd cuando un enemigo muere (mismo patrón que ya
+## usa _attack_player() para llamar a Player.take_damage directamente).
+func register_enemy_kill() -> void:
+	var changed := false
+	for quest in active_quests:
+		for objective in quest.objectives:
+			if objective.kind == QuestObjective.Kind.KILL_ENEMIES and not objective.is_complete():
+				objective.current_amount += 1
+				changed = true
+	if changed:
+		quests_changed.emit()
+
+
+## Reclama la recompensa de una misión ya completada: consume los
+## materiales de sus objetivos de tipo COLLECT_ITEM (con
+## _remove_item_quantity, igual que craft() al gastar materiales),
+## entrega el oro y el objeto de recompensa (si tiene) y mueve la
+## misión de "activas" a "completadas".
+func claim_quest_reward(quest: Quest) -> bool:
+	if quest == null or not active_quests.has(quest):
+		return false
+	if not quest.is_complete():
+		return false
+
+	for objective in quest.objectives:
+		if objective.kind == QuestObjective.Kind.COLLECT_ITEM and objective.target_id != "":
+			_remove_item_quantity(objective.target_id, objective.required_amount)
+
+	if quest.reward_gold > 0:
+		add_gold(quest.reward_gold)
+	if quest.reward_item_id != "":
+		inventory.add_item(ItemCatalog.get_item(quest.reward_item_id), quest.reward_item_quantity)
+
+	quest.completed = true
+	active_quests.erase(quest)
+	completed_quests.append(quest)
+
+	inventory_changed.emit()
+	quests_changed.emit()
+	return true
+
+
+## --- Recoger / soltar objetos del suelo ---
+
+## Escanea (por distancia, igual que _cycle_target hace con "enemies")
+## el grupo "world_items" para encontrar el más cercano al alcance.
+func _scan_nearby_pickup() -> void:
+	var items := get_tree().get_nodes_in_group("world_items")
+	var closest: WorldItem = null
+	var closest_dist := pickup_range
+
+	for candidate in items:
+		if not is_instance_valid(candidate):
+			continue
+		var dist := global_position.distance_to(candidate.global_position)
+		if dist <= closest_dist:
+			closest_dist = dist
+			closest = candidate
+
+	if closest != nearby_world_item:
+		nearby_world_item = closest
+		pickup_target_changed.emit("" if closest == null else closest.get_display_name())
+
+
+func _try_pickup() -> void:
+	if nearby_world_item == null or not is_instance_valid(nearby_world_item):
+		return
+	pickup_world_item(nearby_world_item)
+
+
+## Recoge un objeto del suelo. El oro se suma directamente a "gold" (no
+## ocupa hueco de mochila); el resto de objetos pasan por
+## Inventory.has_space_for() antes de tocar nada: si no hay espacio, no
+## se recoge (ni se toca el inventario ni se destruye el objeto del suelo).
+func pickup_world_item(world_item: WorldItem) -> bool:
+	if world_item == null or not is_instance_valid(world_item):
+		return false
+	var item: ItemData = world_item.item_data
+	var quantity: int = world_item.quantity
+	if item == null or quantity <= 0:
+		return false
+
+	if item.is_currency:
+		add_gold(quantity)
+		_remove_nearby_world_item(world_item)
+		return true
+
+	if not inventory.has_space_for(item, quantity):
+		return false  # No hay espacio: no se recoge.
+
+	if inventory.add_item(item, quantity):
+		_remove_nearby_world_item(world_item)
+		inventory_changed.emit()
+		return true
+
+	return false
+
+
+func _remove_nearby_world_item(world_item: WorldItem) -> void:
+	if nearby_world_item == world_item:
+		nearby_world_item = null
+		pickup_target_changed.emit("")
+	world_item.queue_free()
+
+
+## Suelta "quantity" unidades del objeto en la ranura "index" de la
+## mochila (se ajusta automáticamente si se pide más de lo que hay), y
+## las materializa como un WorldItem delante del jugador.
+func drop_item_from_backpack(index: int, quantity: int) -> bool:
+	var entry = inventory.get_at(index)
+	if entry == null:
+		return false
+	var item: ItemData = entry["item"]
+	var available: int = entry["quantity"]
+	var drop_quantity: int = clampi(quantity, 1, available)
+
+	var world_item := WorldItem.new()
+	world_item.item_data = item
+	world_item.quantity = drop_quantity
+	var parent := get_parent()
+	if parent == null:
+		return false
+	parent.add_child(world_item)
+	world_item.global_position = global_position + facing_direction * 40.0 + Vector2(randf_range(-8.0, 8.0), randf_range(-8.0, 8.0))
+
+	if drop_quantity >= available:
+		inventory.remove_at(index)
+	else:
+		entry["quantity"] -= drop_quantity
+
+	inventory_changed.emit()
+	return true
+
+
+## --- Sprite de cabeza (prueba de arte direccional) ---
+
+func _load_head_textures() -> void:
+	_head_textures = {
+		"up": preload("res://assets/character/armour/cabeza-sin-nada-up.png"),
+		"down": preload("res://assets/character/armour/cabeza-sin-nada-down.png"),
+		"up_right": preload("res://assets/character/armour/cabeza-sin-nada-diagonal-arriba-derecha.png"),
+		"up_left": preload("res://assets/character/armour/cabeza-sin-nada-diagonal-arriba-izq.png"),
+		"down_right": preload("res://assets/character/armour/cabeza-sin-nada-dia-abajo-dere.png"),
+		"down_left": preload("res://assets/character/armour/cabeza-sin-nada-diagonal.png"),
+	}
+
+
+## Traduce "facing_direction" (siempre uno de los 8 vectores posibles
+## del movimiento en cruz/diagonal de _handle_movement) al sprite de
+## cabeza correspondiente. Solo hay arte de prueba para 6 direcciones;
+## para "izquierda"/"derecha" puros se reutiliza el diagonal hacia
+## abajo del mismo lado, que es el que menos desentona visualmente.
+func _update_head_sprite() -> void:
+	if head_sprite == null or _head_textures.is_empty():
+		return
+
+	var dir := facing_direction
+	if dir == Vector2.ZERO:
+		return
+
+	var deg := rad_to_deg(dir.angle())  # 0=derecha, 90=abajo, -90=arriba, 180/-180=izquierda
+	var key: String
+
+	if deg > -22.5 and deg <= 67.5:
+		key = "down_right"
+	elif deg > 67.5 and deg <= 112.5:
+		key = "down"
+	elif deg > 112.5 and deg <= 157.5:
+		key = "down_left"
+	elif deg > 157.5 or deg <= -157.5:
+		key = "down_left"
+	elif deg > -157.5 and deg <= -112.5:
+		key = "up_left"
+	elif deg > -112.5 and deg <= -67.5:
+		key = "up"
+	else:
+		key = "up_right"
+
+	head_sprite.texture = _head_textures.get(key)
+
+
 func _physics_process(delta: float) -> void:
 	if is_dead:
 		velocity = Vector2.ZERO
@@ -446,6 +681,7 @@ func _physics_process(delta: float) -> void:
 
 	_handle_timers(delta)
 	_handle_movement(delta)
+	_scan_nearby_pickup()
 
 
 func _input(event: InputEvent) -> void:
@@ -462,6 +698,8 @@ func _input(event: InputEvent) -> void:
 				_power_strike()
 			KEY_SPACE:
 				_dodge()
+			KEY_F:
+				_try_pickup()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		_basic_attack()
 
@@ -501,6 +739,7 @@ func _handle_movement(delta: float) -> void:
 	if input_vector != Vector2.ZERO:
 		facing_direction = input_vector
 		attack_area.position = facing_direction * 15.0
+		_update_head_sprite()
 
 	var wants_to_sprint := Input.is_physical_key_pressed(KEY_SHIFT) and input_vector != Vector2.ZERO
 	var is_sprinting := false

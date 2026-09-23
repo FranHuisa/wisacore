@@ -8,6 +8,10 @@
 
 config_version=5
 
+[autoload]
+
+GameSave="*res://scripts/game_save.gd"
+
 [animation]
 
 compatibility/default_parent_skeleton_in_mesh_instance_3d=true

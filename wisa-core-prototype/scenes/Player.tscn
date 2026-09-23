@@ -1,6 +1,7 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/character/armour/cabeza-sin-nada-down.png" id="2_head_down"]
 
 [sub_resource type="RectangleShape2D" id="PlayerShape"]
 size = Vector2(26, 26)
@@ -21,6 +22,12 @@ color = Color(0.227, 0.169, 0.290, 1)
 points = PackedVector2Array(0, -18, 14, 0, 0, 18, -14, 0, 0, -18)
 width = 3.0
 default_color = Color(0.039, 0.031, 0.063, 1)
+
+[node name="HeadSprite" type="Sprite2D" parent="."]
+position = Vector2(0, -16)
+scale = Vector2(0.8, 0.8)
+texture = ExtResource("2_head_down")
+texture_filter = 1
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("PlayerShape")
