@@ -53,7 +53,6 @@ var world_drop_zone: WorldDropZone
 var drop_quantity_popup: PopupPanel
 
 var skill_tree_panel: Control
-var skill_tree_area: Control
 var skill_points_label: Label
 var skill_node_buttons: Dictionary = {}
 var skill_tree_lines: Array = []
@@ -1131,12 +1130,15 @@ func _on_claim_quest_pressed(quest: Quest) -> void:
 
 ## --- Ventana de Árbol de Habilidades (T) ---
 ##
-## BASE de partida: dibuja los nodos de SkillTreeDatabase en una
-## rejilla (columna = rama, fila = tier) con líneas de conexión hacia
-## sus prerrequisitos, y permite desbloquearlos con un clic si hay
-## puntos suficientes. El contenido real (ramas, nombres, bonus,
-## costes) se ajusta por completo en scripts/skill_tree_database.gd
-## sin tocar nada de esta ventana.
+## BASE de partida: una pestaña por rama (SkillNode.branch), y dentro
+## de cada pestaña los nodos se dibujan de ABAJO hacia ARRIBA (el nivel
+## 0 de grid_position.y queda pegado al fondo del área, y sube según
+## crece grid_position.y). Con 2 columnas por nivel y cada nodo
+## exigiendo el de la columna OPUESTA del nivel de abajo (ver
+## skill_tree_database.gd), las líneas de conexión se cruzan formando
+## una X entre cada dos niveles. El contenido real (ramas, nombres,
+## columnas, niveles, bonus, costes) se ajusta por completo en
+## scripts/skill_tree_database.gd sin tocar nada de esta ventana.
 
 func _build_skill_tree_ui() -> void:
 	if ui_canvas == null:
@@ -1160,54 +1162,94 @@ func _build_skill_tree_ui() -> void:
 	hint.custom_minimum_size = Vector2(280, 0)
 	box.add_child(hint)
 
-	# Tamaño del área según la rejilla más ancha/alta que haya en la BD.
-	var max_col := 0
-	var max_row := 0
+	# --- Agrupar los nodos por rama, conservando el orden en que
+	# aparecen en SkillTreeDatabase (así las pestañas salen en ese
+	# mismo orden: Combate, Resistencia, Agilidad...). ---
+	var branch_order: Array = []
+	var branch_nodes: Dictionary = {}
 	for node in player.skill_tree_nodes:
-		max_col = max(max_col, node.grid_position.x)
-		max_row = max(max_row, node.grid_position.y)
+		if not branch_nodes.has(node.branch):
+			branch_nodes[node.branch] = []
+			branch_order.append(node.branch)
+		branch_nodes[node.branch].append(node)
 
-	skill_tree_area = Control.new()
-	skill_tree_area.custom_minimum_size = SKILL_TREE_ORIGIN * 2.0 + Vector2(max_col + 1, max_row + 1) * SKILL_CELL_SIZE
-	box.add_child(skill_tree_area)
+	var tabs := TabContainer.new()
+	tabs.custom_minimum_size = Vector2(320, 320)
+	var tabs_panel_style := StyleBoxFlat.new()
+	tabs_panel_style.bg_color = Color(0.11, 0.09, 0.14, 0.98)
+	tabs_panel_style.border_color = Color(0.039, 0.031, 0.063)
+	tabs_panel_style.set_border_width_all(2)
+	tabs.add_theme_stylebox_override("panel", tabs_panel_style)
+	var tab_selected_style := StyleBoxFlat.new()
+	tab_selected_style.bg_color = Color(0.169, 0.125, 0.220)
+	tab_selected_style.set_content_margin_all(8)
+	tabs.add_theme_stylebox_override("tab_selected", tab_selected_style)
+	var tab_unselected_style := StyleBoxFlat.new()
+	tab_unselected_style.bg_color = Color(0.11, 0.09, 0.14)
+	tab_unselected_style.set_content_margin_all(8)
+	tabs.add_theme_stylebox_override("tab_unselected", tab_unselected_style)
+	tabs.add_theme_color_override("font_selected_color", Color(0.95, 0.65, 0.15))
+	tabs.add_theme_color_override("font_unselected_color", Color(0.6, 0.58, 0.62))
+	box.add_child(tabs)
 
-	# Líneas de conexión primero, para que los nodos queden por encima.
+	# Líneas primero (por rama), luego los nodos encima, igual que antes.
 	skill_tree_lines.clear()
+	skill_node_buttons.clear()
 	var by_id: Dictionary = {}
 	for node in player.skill_tree_nodes:
 		by_id[node.skill_id] = node
 
-	for node in player.skill_tree_nodes:
-		for required_id in node.requires:
-			var parent_node: SkillNode = by_id.get(required_id)
-			if parent_node == null:
-				continue
-			var line := Line2D.new()
-			line.width = 3.0
-			line.default_color = Color(0.35, 0.3, 0.4)
-			line.points = PackedVector2Array([_skill_node_center(parent_node), _skill_node_center(node)])
-			skill_tree_area.add_child(line)
-			skill_tree_lines.append({"line": line, "from": parent_node, "to": node})
+	for branch in branch_order:
+		var nodes_in_branch: Array = branch_nodes[branch]
 
-	skill_node_buttons.clear()
-	for node in player.skill_tree_nodes:
-		var button := _make_skill_node_button(node)
-		button.position = _skill_node_top_left(node)
-		button.custom_minimum_size = SKILL_NODE_SIZE
-		button.size = SKILL_NODE_SIZE
-		button.pressed.connect(_on_skill_node_pressed.bind(node))
-		skill_tree_area.add_child(button)
-		skill_node_buttons[node.skill_id] = button
+		var max_col := 0
+		var max_row := 0
+		for node in nodes_in_branch:
+			max_col = max(max_col, node.grid_position.x)
+			max_row = max(max_row, node.grid_position.y)
+
+		var tab_area := Control.new()
+		tab_area.name = branch if branch != "" else "Habilidades"
+		tab_area.custom_minimum_size = SKILL_TREE_ORIGIN * 2.0 + Vector2(max_col + 1, max_row + 1) * SKILL_CELL_SIZE
+		tabs.add_child(tab_area)
+
+		for node in nodes_in_branch:
+			for required_id in node.requires:
+				var parent_node: SkillNode = by_id.get(required_id)
+				if parent_node == null:
+					continue
+				var line := Line2D.new()
+				line.width = 3.0
+				line.default_color = Color(0.35, 0.3, 0.4)
+				line.points = PackedVector2Array([
+					_skill_node_center(parent_node, max_row),
+					_skill_node_center(node, max_row),
+				])
+				tab_area.add_child(line)
+				skill_tree_lines.append({"line": line, "from": parent_node, "to": node})
+
+		for node in nodes_in_branch:
+			var button := _make_skill_node_button(node)
+			button.position = _skill_node_top_left(node, max_row)
+			button.custom_minimum_size = SKILL_NODE_SIZE
+			button.size = SKILL_NODE_SIZE
+			button.pressed.connect(_on_skill_node_pressed.bind(node))
+			tab_area.add_child(button)
+			skill_node_buttons[node.skill_id] = button
 
 	_refresh_skill_tree_ui()
 
 
-func _skill_node_top_left(node: SkillNode) -> Vector2:
-	return SKILL_TREE_ORIGIN + Vector2(node.grid_position.x, node.grid_position.y) * SKILL_CELL_SIZE
+## "max_row" es el nivel más alto de ESA rama: al nivel 0 (grid_position.y
+## = 0) le corresponde la fila de abajo del todo, y niveles mayores van
+## subiendo -> el árbol crece de abajo hacia arriba.
+func _skill_node_top_left(node: SkillNode, max_row: int) -> Vector2:
+	var row_from_bottom := max_row - node.grid_position.y
+	return SKILL_TREE_ORIGIN + Vector2(node.grid_position.x, row_from_bottom) * SKILL_CELL_SIZE
 
 
-func _skill_node_center(node: SkillNode) -> Vector2:
-	return _skill_node_top_left(node) + SKILL_NODE_SIZE / 2.0
+func _skill_node_center(node: SkillNode, max_row: int) -> Vector2:
+	return _skill_node_top_left(node, max_row) + SKILL_NODE_SIZE / 2.0
 
 
 func _make_skill_node_button(node: SkillNode) -> Button:
