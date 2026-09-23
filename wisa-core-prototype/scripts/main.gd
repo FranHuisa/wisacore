@@ -645,18 +645,44 @@ func _make_slot_button(text: String) -> ItemSlotButton:
 	var button := ItemSlotButton.new()
 	button.text = text
 	button.clip_text = true
+	# Alto/ancho mínimo explícito + márgenes en la stylebox: sin esto el
+	# botón podía quedarse con una altura casi nula en algunos
+	# contenedores (p. ej. el selector de la ventana de Árboles) y el
+	# texto se veía cortado a un par de rayas verticales en vez del
+	# nombre completo.
+	button.custom_minimum_size = Vector2(0, 32)
 	button.add_theme_font_size_override("font_size", 12)
 	button.add_theme_color_override("font_color", Color(0.88, 0.85, 0.90))
+	button.add_theme_color_override("font_disabled_color", Color(0.95, 0.65, 0.15))
+	button.add_theme_color_override("font_hover_color", Color(0.95, 0.93, 0.96))
+	button.add_theme_color_override("font_pressed_color", Color(0.95, 0.93, 0.96))
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.169, 0.125, 0.220)
 	style.border_color = Color(0.039, 0.031, 0.063)
 	style.set_border_width_all(2)
+	style.set_content_margin_all(6)
 	button.add_theme_stylebox_override("normal", style)
 
 	var hover_style: StyleBoxFlat = style.duplicate()
 	hover_style.bg_color = Color(0.3, 0.2, 0.3)
 	button.add_theme_stylebox_override("hover", hover_style)
+
+	var pressed_style: StyleBoxFlat = style.duplicate()
+	pressed_style.bg_color = Color(0.3, 0.2, 0.3)
+	button.add_theme_stylebox_override("pressed", pressed_style)
+
+	# "disabled" se usa para marcar la pestaña que ya se está viendo
+	# (ver _show_tree_view en main.gd): sin una stylebox propia aquí,
+	# el motor caía en un estilo por defecto que dejaba el texto casi
+	# invisible.
+	var disabled_style: StyleBoxFlat = style.duplicate()
+	disabled_style.bg_color = Color(0.22, 0.16, 0.27)
+	button.add_theme_stylebox_override("disabled", disabled_style)
+
+	var focus_style: StyleBoxFlat = style.duplicate()
+	focus_style.border_color = Color(0.478, 0.125, 0.188)
+	button.add_theme_stylebox_override("focus", focus_style)
 
 	return button
 
@@ -1368,9 +1394,8 @@ func _show_tree_view(which: String) -> void:
 	call_deferred("_center_skill_tree_ui")
 
 
-## Muestra/oculta las 3 pestañas "generales" del árbol de Efectos
-## (SkillTreeDatabase.EXTRA_BRANCH_NAMES: Crafteo, Competencias,
-## Ingeniería), para diferenciarlas de las 5 pestañas de clase
+## Muestra/oculta las pestañas "generales" del árbol de Efectos
+## (SkillTreeDatabase.EXTRA_BRANCH_NAMES), para diferenciarlas de las 5 pestañas de clase
 ## (Guerrero, Pícaro, Clérigo, Mago, Ingeniero) que están siempre
 ## visibles.
 ##
@@ -1397,7 +1422,8 @@ func _update_effects_extra_toggle_label() -> void:
 	if effects_extra_shown:
 		effects_extra_toggle_button.text = "Ocultar ramas generales"
 	else:
-		effects_extra_toggle_button.text = "Mostrar ramas generales (Crafteo · Competencias · Ingeniería)"
+		var names := ", ".join(SkillTreeDatabase.EXTRA_BRANCH_NAMES)
+		effects_extra_toggle_button.text = "Mostrar ramas generales (%s)" % names
 
 
 ## Construye una vista de árbol genérica: agrupa "nodes" por rama
@@ -1459,12 +1485,19 @@ func _build_tree_view(nodes: Array, is_unlocked_fn: Callable, can_unlock_fn: Cal
 			max_col = max(max_col, node.grid_position.x)
 			max_row = max(max_row, node.grid_position.y)
 
+		var tab_title: String = branch if branch != "" else "General"
 		var tab_area := Control.new()
-		tab_area.name = branch if branch != "" else "General"
+		tab_area.name = tab_title
 		tab_area.custom_minimum_size = SKILL_TREE_ORIGIN * 2.0 + Vector2(max_col + 1, max_row + 1) * SKILL_CELL_SIZE
-		branch_tab_index[branch] = tabs.get_child_count()
+		var tab_index := tabs.get_child_count()
+		branch_tab_index[branch] = tab_index
 		tabs.add_child(tab_area)
 		branch_tabs[branch] = tab_area
+		# El texto de la pestaña se fija explícito con set_tab_title() en
+		# vez de fiarse solo del nombre del nodo (Control.name): el
+		# TabBar puede auto-traducir/recortar ese nombre y dejar la
+		# pestaña casi en blanco (una simple raya) si algo no cuadra.
+		tabs.set_tab_title(tab_index, tab_title)
 
 		for node in nodes_in_branch:
 			for required_id in node.requires:

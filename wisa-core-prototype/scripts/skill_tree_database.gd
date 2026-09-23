@@ -5,12 +5,12 @@ class_name SkillTreeDatabase
 ## WisaCore - Árbol de "Efectos" (BASE): una de las 3 pestañas que
 ## gestiona la ventana de Árboles (tecla T, ver main.gd), junto con el
 ## árbol de Habilidades (weapon_skill_tree_database.gd) y el de Recetas
-## (recipe_tree_database.gd). Este es el árbol de atributos/stats: 8
+## (recipe_tree_database.gd). Este es el árbol de atributos/stats: 6
 ## ramas (pestañas), 5 columnas x 5 niveles cada una, generadas con
 ## SkillTreeGenerators.make_grid_branch() (rejilla con conexión en X
 ## por vecinos - ver ese script para el detalle de la forma).
 ##
-## Con 8 ramas x 25 nodos (200 en total) escribir cada nodo a mano ya
+## Con 6 ramas x 25 nodos (150 en total) escribir cada nodo a mano ya
 ## no es práctico: aquí solo se define QUÉ rama hay y qué atributo de
 ## StatBlock sube cada una (mismas claves que ItemData.stat_bonuses:
 ## estabilidad, agilidad, destreza, punteria, fuerza, voluntad,
@@ -25,14 +25,21 @@ class_name SkillTreeDatabase
 ##
 ## Las 5 primeras ramas (CLASS_BRANCH_NAMES) son las "pestañas de clase"
 ## que pidió el usuario (Guerrero, Pícaro, Clérigo, Mago, Ingeniero) y
-## están visibles por defecto en la ventana de Árboles. Las 3 restantes
-## (EXTRA_BRANCH_NAMES: Crafteo, Competencias, Ingeniería) son las
-## "pestañas generales" - no son de una clase concreta, así que
-## main.gd las oculta al abrir la ventana y las muestra con el botón
-## "Mostrar ramas generales" (ver _build_skill_tree_ui/
-## _toggle_effects_extra_branches en main.gd). Los nombres de aquí son
-## la fuente única de verdad para esa lista, así main.gd no repite los
-## nombres de rama a mano.
+## están visibles por defecto en la ventana de Árboles. La restante
+## (EXTRA_BRANCH_NAMES: Competencias) es la "pestaña general" - no es
+## de una clase concreta, así que main.gd la oculta al abrir la
+## ventana y la muestra con el botón "Mostrar ramas generales" (ver
+## _build_skill_tree_ui/_toggle_effects_extra_branches en main.gd).
+## Los nombres de aquí son la fuente única de verdad para esa lista,
+## así main.gd no repite los nombres de rama a mano.
+##
+## "Crafteo" e "Ingeniería" NO están aquí a propósito: ya existen como
+## rama del árbol de Recetas (recipe_tree_database.gd: "Ingeniería" es
+## justo una de sus 4 ramas de crafteo, y "Crafteo" es ese árbol
+## entero), y "Ingeniero" ya es una pestaña de clase aquí mismo y
+## también una clase del árbol de Habilidades
+## (weapon_skill_tree_database.gd) - tenerlas otra vez aquí como
+## "generales" era puro duplicado.
 ## =========================================================
 
 const COLUMNS := 5
@@ -44,8 +51,6 @@ const BRANCHES := [
 	{"key": "clerigo", "name": "Clérigo", "color": Color(0.85, 0.75, 0.35), "stat": "voluntad"},
 	{"key": "mago", "name": "Mago", "color": Color(0.45, 0.35, 0.75), "stat": "canalizacion"},
 	{"key": "ingeniero", "name": "Ingeniero", "color": Color(0.80, 0.50, 0.20), "stat": "destreza"},
-	{"key": "crafteo", "name": "Crafteo", "color": Color(0.30, 0.65, 0.65), "stat": "punteria"},
-	{"key": "ingenieria", "name": "Ingeniería", "color": Color(0.35, 0.45, 0.65), "stat": "conexion_elemental"},
 	{"key": "competencias", "name": "Competencias", "color": Color(0.55, 0.55, 0.55), "stat": "estabilidad"},
 ]
 
@@ -54,7 +59,7 @@ const CLASS_BRANCH_NAMES := ["Guerrero", "Pícaro", "Clérigo", "Mago", "Ingenie
 
 ## Pestañas "generales" (no son de una clase): ocultas hasta que se
 ## pulsa el botón "Mostrar ramas generales" en la ventana de Árboles.
-const EXTRA_BRANCH_NAMES := ["Crafteo", "Competencias", "Ingeniería"]
+const EXTRA_BRANCH_NAMES := ["Competencias"]
 
 
 static func get_all_nodes() -> Array[SkillNode]:
